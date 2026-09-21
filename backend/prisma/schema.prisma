@@ -1,0 +1,557 @@
+// ============================================================================
+// Bartcash — Prisma schema (Express/Postgres target)
+// ============================================================================
+// Source of truth for this file, in order of authority:
+//   1. bartcash_migration_guide.docx — Sprint 1 (schema additions) and
+//      Sprint 6 (negotiation mechanics). This is the most current, most
+//      specific spec for the Express build and overrides the general SDLC
+//      docs wherever they disagree (see "Known conflicts" below).
+//   2. 001_express_migration_prep.sql — authoritative for every FK index.
+//   3. bartcash_phase3_modelling_design.docx (original 13 models, §3) —
+//      still authoritative for every table NOT touched by the migration
+//      guide (users, items core fields, trades core fields, messages,
+//      ratings, disputes, notifications, etc.).
+//
+// Design choices, confirmed (not assumptions — resolved against the
+// migration guide):
+//   1. Enum-like columns are String, not Prisma `enum`. Enforced at the
+//      application/validation layer (Zod), per Sprint 1's explicit note
+//      that Prisma introspection doesn't map Postgres CHECK constraints.
+//   2. Every FK index from 001_express_migration_prep.sql is reproduced
+//      with @@index.
+//   3. UUID PKs use @default(uuid()) (app-generated), matching Laravel's
+//      existing app-side UUID generation. The migration prep SQL doesn't
+//      touch column defaults, so this carries over unchanged.
+//   4. created_at/updated_at are @db.Timestamp(6) (no timezone), matching
+//      Laravel's default migration output — unchanged by the prep SQL.
+//   5. trade_offers has no round_number, status, or expires_at column.
+//      Sprint 6 deliberately uses lazy expiration instead of a scheduled
+//      job: round_started_at lives on Trade, elapsed time is checked
+//      whenever the trade is read or acted on, and round number is
+//      derived by counting each trade's trade_offers rows. This is
+//      confirmed correct, not an inferred shortcut.
+//   6. items.user_declared_value is a single value, per explicit product
+//      decision made directly with the founder — not a range. (The
+//      separately-sourced migration guide assumed a range without this
+//      context; that assumption is overridden here.)
+//   7. transactions and comments field lists are copied verbatim from
+//      Sprint 1 — trade_type, receiver_item_id, offered_item_ids,
+//      agreed_cash_amount, agreed_top_up_amount, agreed_at all confirmed
+//      required; comments has no deleted_at, confirmed a hard delete
+//      (DELETE /comments/{id} per Sprint 5 doesn't specify soft-delete,
+//      and no column exists to support one).
+//   8. item_valuations stays 1:1 with items, matching the original design
+//      doc ("Items hasOne ItemValuations") and the existing override/retry
+//      endpoints, which both act on a single row per item.
+//   9. Decimal precision for all new money/value fields is Decimal(10,2),
+//      matching the existing item_valuations.value_min/value_max
+//      precision — no conflicting guidance in either source document.
+//   10. otp_codes and a rate-limit table are intentionally excluded —
+//       Sprint 2 explicitly leaves both as "in-memory store or a small
+//       dedicated table," i.e. an open implementation choice, not a
+//       required schema addition.
+//
+// ⚠ ONE REMAINING ACTION ITEM (not a schema conflict — a process gap):
+//   - The migration guide's 10 sprints don't include shipping (Phase A),
+//     because that guide was produced separately and predates this design.
+//     Shipping is a real, decided feature (Section 3.17 of the Modelling
+//     & Design doc) and is included in this schema as the Shipment model.
+//     The migration guide itself needs a new sprint added for it before
+//     Sprint 6/8 implementation — this schema isn't waiting on that, but
+//     the guide is now the document that's out of date, not this file.
+// ============================================================================
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// Users
+// ----------------------------------------------------------------------------
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  firstName         String    @map("first_name") @db.VarChar(100)
+  lastName          String    @map("last_name") @db.VarChar(100)
+  email             String    @unique @db.VarChar(255)
+  password          String    @db.VarChar(255)
+  profilePhoto      String?   @map("profile_photo") @db.VarChar(500)
+  bio               String?
+  location          String?   @db.VarChar(255)
+  averageRating     Decimal   @default(0.00) @map("average_rating") @db.Decimal(3, 2)
+  totalTrades       Int       @default(0) @map("total_trades")
+  isActive          Boolean   @default(true) @map("is_active")
+  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  items                    Item[]
+  refreshTokens            RefreshToken[]
+  passwordResetTokens      PasswordResetToken[]
+  notifications            Notification[]
+  messagesSent             Message[]            @relation("MessagesBySender")
+  tradesAsProposer         Trade[]              @relation("TradesAsProposer")
+  tradesAsReceiver         Trade[]              @relation("TradesAsReceiver")
+  tradesCancelled          Trade[]              @relation("TradesCancelledBy")
+  tradesCurrentOffer       Trade[]              @relation("TradesCurrentOfferBy")
+  tradesAwaitingResponse   Trade[]              @relation("TradesAwaitingResponseFrom")
+  tradeItemsOffered        TradeItem[]          @relation("TradeItemsOfferedBy")
+  tradeOffersMade          TradeOffer[]         @relation("TradeOffersOfferedBy")
+  transactionsAsProposer   Transaction[]        @relation("TransactionsAsProposer")
+  transactionsAsReceiver   Transaction[]        @relation("TransactionsAsReceiver")
+  ratingsGiven             Rating[]             @relation("RatingsAsRater")
+  ratingsReceived          Rating[]             @relation("RatingsAsRated")
+  disputesRaised           Dispute[]            @relation("DisputesRaisedBy")
+  comments                 Comment[]
+
+  @@map("users")
+}
+
+// ----------------------------------------------------------------------------
+// RefreshTokens
+// ----------------------------------------------------------------------------
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  token      String    @unique @db.VarChar(500)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamp(6)
+  revoked    Boolean   @default(false)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamp(6)
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_refresh_tokens_user_id")
+  @@index([token, revoked], map: "idx_refresh_tokens_token_revoked")
+  @@map("refresh_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// PasswordResetTokens
+// ----------------------------------------------------------------------------
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @db.VarChar(500)
+  expiresAt DateTime  @map("expires_at") @db.Timestamp(6)
+  used      Boolean   @default(false)
+  usedAt    DateTime? @map("used_at") @db.Timestamp(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_password_reset_tokens_user_id")
+  @@map("password_reset_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// Categories
+// ----------------------------------------------------------------------------
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  slug      String   @unique @db.VarChar(100)
+  icon      String?  @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  items Item[]
+
+  @@map("categories")
+}
+
+// ----------------------------------------------------------------------------
+// Items
+// (Called "listings" in some v2.1 API-response language and in the
+// comments table's listing_id column — same underlying table, no
+// separate Listings table exists anywhere.)
+// ----------------------------------------------------------------------------
+model Item {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  title     String    @db.VarChar(255)
+  description String  @db.Text
+  /// One of: new, good, fair, poor
+  condition String    @db.VarChar(20)
+  desiredTrade String? @map("desired_trade") @db.Text
+  /// One of: available, in_trade, traded, inactive
+  status    String    @default("available") @db.VarChar(20)
+  isService Boolean   @default(false) @map("is_service")
+  location  String?   @db.VarChar(255)
+  // --- v2.1: dual valuation, single value (explicit product decision —
+  // NOT a range; a separately-sourced migration guide independently
+  // assumed a range without this context, and that assumption was wrong) ---
+  userDeclaredValue Decimal? @map("user_declared_value") @db.Decimal(10, 2)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  user       User            @relation(fields: [userId], references: [id])
+  category   Category        @relation(fields: [categoryId], references: [id])
+  images     ItemImage[]
+  valuation  ItemValuation?
+  tradeItems TradeItem[]
+  comments   Comment[]
+  transactionsAsReceiverItem Transaction[]
+
+  @@index([userId], map: "idx_items_user_id")
+  @@index([categoryId], map: "idx_items_category_id")
+  @@map("items")
+}
+
+// ----------------------------------------------------------------------------
+// ItemImages
+// ----------------------------------------------------------------------------
+model ItemImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  itemId       String   @map("item_id") @db.Uuid
+  url          String   @db.VarChar(500)
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@index([itemId], map: "idx_item_images_item_id")
+  @@map("item_images")
+}
+
+// ----------------------------------------------------------------------------
+// ItemValuations
+// 1:1 with Item — confirmed by the original design doc ("Items hasOne
+// ItemValuations") and by the override/retry endpoints both acting on a
+// single row per item.
+// ----------------------------------------------------------------------------
+model ItemValuation {
+  id           String    @id @default(uuid()) @db.Uuid
+  itemId       String    @unique @map("item_id") @db.Uuid
+  valueMin     Decimal?   @map("value_min") @db.Decimal(10, 2)
+  valueMax     Decimal?   @map("value_max") @db.Decimal(10, 2)
+  currency     String    @default("USD") @db.VarChar(3)
+  /// Groq confidence level: high, medium, low
+  confidence   String?   @db.VarChar(20)
+  rawResponse  Json?     @map("raw_response")
+  apiModel     String?   @map("api_model") @db.VarChar(100)
+  /// One of: pending, completed, failed
+  status       String    @default("pending") @db.VarChar(20)
+  failedReason String?   @map("failed_reason") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@index([itemId], map: "idx_item_valuations_item_id")
+  @@map("item_valuations")
+}
+
+// ----------------------------------------------------------------------------
+// Trades
+// ----------------------------------------------------------------------------
+model Trade {
+  id                String    @id @default(uuid()) @db.Uuid
+  proposerId        String    @map("proposer_id") @db.Uuid
+  receiverId        String    @map("receiver_id") @db.Uuid
+  /// One of: pending (legacy — new trades now created directly as
+  /// negotiating per migration guide Sprint 6), negotiating, accepted,
+  /// declined, completed, disputed, cancelled. There is no separate
+  /// "expired" status — a timed-out round auto-declines directly to
+  /// declined (see round_started_at below).
+  status            String    @db.VarChar(20)
+  /// One of: meetup, delivery. Unchanged by this migration — shipping
+  /// (Phase A, documented in Phase 4a/4b/4c v2.1) is not yet part of the
+  /// Express migration plan; see header note.
+  completionMethod  String?   @map("completion_method") @db.VarChar(20)
+  meetupDetails     String?   @map("meetup_details") @db.Text
+  deliveryDetails   String?   @map("delivery_details") @db.Text
+  completedAt       DateTime? @map("completed_at") @db.Timestamp(6)
+  cancelledAt       DateTime? @map("cancelled_at") @db.Timestamp(6)
+  cancelledBy       String?   @map("cancelled_by") @db.Uuid
+  /// Who made the current pending offer — the other party is the one
+  /// whose turn it is to respond. Required by Sprint 6's rebargain
+  /// validation ("must be the calling user's turn").
+  currentOfferBy    String?   @map("current_offer_by") @db.Uuid
+  /// When the current round began. Sprint 6's chosen mechanism for the
+  /// 3-hour round timer is lazy expiration: elapsed time from this
+  /// timestamp is checked whenever the trade is read or acted on, rather
+  /// than via a stored per-offer expiry or a scheduled job.
+  roundStartedAt    DateTime? @map("round_started_at") @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamp(6)
+  tradeType             String    @map("trade_type") @db.VarChar(20)
+  awaitingResponseFrom  String?   @map("awaiting_response_from") @db.Uuid
+  proposerConfirmed     Boolean   @default(false) @map("proposer_confirmed")
+  receiverConfirmed     Boolean   @default(false) @map("receiver_confirmed")
+
+  awaitingResponseFromUser User? @relation("TradesAwaitingResponseFrom", fields: [awaitingResponseFrom], references: [id])
+  proposer       User          @relation("TradesAsProposer", fields: [proposerId], references: [id])
+  receiver       User          @relation("TradesAsReceiver", fields: [receiverId], references: [id])
+  cancelledByUser User?        @relation("TradesCancelledBy", fields: [cancelledBy], references: [id])
+  currentOfferByUser User?     @relation("TradesCurrentOfferBy", fields: [currentOfferBy], references: [id])
+  tradeItems     TradeItem[]
+  tradeOffers    TradeOffer[]
+  transaction    Transaction?
+  messages       Message[]
+  ratings        Rating[]
+  dispute        Dispute?
+
+  @@index([awaitingResponseFrom])
+  @@index([proposerId], map: "idx_trades_proposer_id")
+  @@index([receiverId], map: "idx_trades_receiver_id")
+  @@index([cancelledBy], map: "idx_trades_cancelled_by")
+  @@map("trades")
+}
+
+// ----------------------------------------------------------------------------
+// TradeItems
+// ----------------------------------------------------------------------------
+model TradeItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  tradeId    String   @map("trade_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  offeredBy  String   @map("offered_by") @db.Uuid
+  /// One of: proposer, receiver
+  side       String   @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  trade         Trade @relation(fields: [tradeId], references: [id])
+  item          Item  @relation(fields: [itemId], references: [id])
+  offeredByUser User  @relation("TradeItemsOfferedBy", fields: [offeredBy], references: [id])
+
+  @@index([tradeId], map: "idx_trade_items_trade_id")
+  @@index([itemId], map: "idx_trade_items_item_id")
+  @@map("trade_items")
+}
+
+// ----------------------------------------------------------------------------
+// TradeOffers (v2.0/v2.1, new — negotiation history, one row per round)
+// Field list copied verbatim from migration guide Sprint 1. No
+// round_number, status, or expires_at column: round number is derived by
+// counting each trade's trade_offers rows, and the 3-hour timer is
+// enforced via Trade.round_started_at (lazy check), not a stored
+// per-offer expiry. This is Sprint 6's explicit, deliberate design —
+// not a simplification.
+// ----------------------------------------------------------------------------
+model TradeOffer {
+  id             String   @id @default(uuid()) @db.Uuid
+  tradeId        String   @map("trade_id") @db.Uuid
+  offeredBy      String   @map("offered_by") @db.Uuid
+  /// One of: item, cash, item_cash
+  tradeType      String   @map("trade_type") @db.VarChar(50)
+  cashAmount     Decimal? @map("cash_amount") @db.Decimal(10, 2)
+  topUpAmount    Decimal? @map("top_up_amount") @db.Decimal(10, 2)
+  /// Array of item UUIDs — application-level reference, not a Prisma relation
+  offeredItemIds Json     @map("offered_item_ids")
+  isCurrent      Boolean  @default(true) @map("is_current")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  trade         Trade @relation(fields: [tradeId], references: [id])
+  offeredByUser User  @relation("TradeOffersOfferedBy", fields: [offeredBy], references: [id])
+
+  @@index([tradeId])
+  @@index([offeredBy])
+  @@map("trade_offers")
+}
+
+// ----------------------------------------------------------------------------
+// Transactions (v2.0/v2.1, new — created once a trade is accepted)
+// Field list copied verbatim from migration guide Sprint 1 (12 fields).
+// No created_at/updated_at — agreed_at/completed_at cover this table's
+// lifecycle timestamps.
+// ----------------------------------------------------------------------------
+model Transaction {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tradeId            String    @unique @map("trade_id") @db.Uuid
+  /// One of: item, cash, item_cash
+  tradeType          String    @map("trade_type") @db.VarChar(50)
+  proposerId         String    @map("proposer_id") @db.Uuid
+  receiverId         String    @map("receiver_id") @db.Uuid
+  receiverItemId     String?   @map("receiver_item_id") @db.Uuid
+  /// Array of item UUIDs offered by the proposer — application-level reference
+  offeredItemIds     Json      @map("offered_item_ids")
+  agreedCashAmount   Decimal?  @map("agreed_cash_amount") @db.Decimal(10, 2)
+  agreedTopUpAmount  Decimal?  @map("agreed_top_up_amount") @db.Decimal(10, 2)
+  /// One of: pending_completion, completed. Dispute-driven status is not
+  /// addressed by Sprint 6/8/9 — decide when Sprint 9 (Disputes) is built
+  /// whether a transaction needs its own "disputed" value or relies on
+  /// the parent Trade.status instead.
+  status             String    @db.VarChar(30)
+  agreedAt           DateTime? @map("agreed_at") @db.Timestamp(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamp(6)
+
+  trade        Trade @relation(fields: [tradeId], references: [id])
+  proposer     User  @relation("TransactionsAsProposer", fields: [proposerId], references: [id])
+  receiver     User  @relation("TransactionsAsReceiver", fields: [receiverId], references: [id])
+  receiverItem Item? @relation(fields: [receiverItemId], references: [id])
+
+  @@index([proposerId])
+  @@index([receiverId])
+  @@index([receiverItemId])
+  @@map("transactions")
+}
+
+// ----------------------------------------------------------------------------
+// Messages
+// ----------------------------------------------------------------------------
+model Message {
+  id        String    @id @default(uuid()) @db.Uuid
+  tradeId   String    @map("trade_id") @db.Uuid
+  senderId  String    @map("sender_id") @db.Uuid
+  body      String    @db.Text
+  readAt    DateTime? @map("read_at") @db.Timestamp(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  trade  Trade @relation(fields: [tradeId], references: [id])
+  sender User  @relation("MessagesBySender", fields: [senderId], references: [id])
+
+  @@index([tradeId], map: "idx_messages_trade_id")
+  @@index([senderId], map: "idx_messages_sender_id")
+  @@map("messages")
+}
+
+// ----------------------------------------------------------------------------
+// Ratings
+// ----------------------------------------------------------------------------
+model Rating {
+  id        String    @id @default(uuid()) @db.Uuid
+  tradeId   String    @map("trade_id") @db.Uuid
+  raterId   String    @map("rater_id") @db.Uuid
+  ratedId   String    @map("rated_id") @db.Uuid
+  /// 1–5. Range not enforced by Prisma — add a CHECK constraint via raw
+  /// SQL in the migration, or validate at the application layer.
+  score     Int       @db.SmallInt
+  review    String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  trade Trade @relation(fields: [tradeId], references: [id])
+  rater User  @relation("RatingsAsRater", fields: [raterId], references: [id])
+  rated User  @relation("RatingsAsRated", fields: [ratedId], references: [id])
+
+  @@unique([tradeId, raterId])
+  @@index([tradeId], map: "idx_ratings_trade_id")
+  @@index([raterId], map: "idx_ratings_rater_id")
+  @@index([ratedId], map: "idx_ratings_rated_id")
+  @@map("ratings")
+}
+
+// ----------------------------------------------------------------------------
+// Disputes
+// ----------------------------------------------------------------------------
+model Dispute {
+  id               String    @id @default(uuid()) @db.Uuid
+  tradeId          String    @unique @map("trade_id") @db.Uuid
+  raisedBy         String    @map("raised_by") @db.Uuid
+  reason           String    @db.Text
+  /// One of: open, under_review, resolved, closed
+  status           String    @default("open") @db.VarChar(20)
+  resolutionNotes  String?   @map("resolution_notes") @db.Text
+  resolvedAt       DateTime? @map("resolved_at") @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  trade      Trade @relation(fields: [tradeId], references: [id])
+  raisedByUser User @relation("DisputesRaisedBy", fields: [raisedBy], references: [id])
+
+  @@index([tradeId], map: "idx_disputes_trade_id")
+  @@index([raisedBy], map: "idx_disputes_raised_by")
+  @@map("disputes")
+}
+
+// ----------------------------------------------------------------------------
+// Notifications
+// ----------------------------------------------------------------------------
+model Notification {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// One of: trade_request, trade_accepted, trade_declined, trade_completed,
+  /// new_message, dispute_raised, trade_cancelled, new_comment (v2.1 —
+  /// Sprint 5 doesn't specify a notification, added as a reasonable
+  /// inference; confirm before relying on it)
+  type          String    @db.VarChar(30)
+  title         String    @db.VarChar(255)
+  body          String    @db.Text
+  /// Polymorphic-style pointer (trade, message, etc.) — intentionally not
+  /// a Prisma relation since it can reference different tables.
+  referenceId   String?   @map("reference_id") @db.Uuid
+  referenceType String?   @map("reference_type") @db.VarChar(50)
+  readAt        DateTime? @map("read_at") @db.Timestamp(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_notifications_user_id")
+  @@map("notifications")
+}
+
+// ----------------------------------------------------------------------------
+// Comments (v2.1, new — public per-listing enquiry, no trade state)
+// Field list copied verbatim from migration guide Sprint 1. No deleted_at:
+// DELETE /comments/{id} (Sprint 5) is a hard delete — there's no column
+// to support a soft delete, and neither Sprint 1 nor Sprint 5 asks for one.
+// ----------------------------------------------------------------------------
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  listing Item @relation(fields: [listingId], references: [id])
+  user    User @relation(fields: [userId], references: [id])
+
+  @@index([listingId])
+  @@index([userId])
+  @@map("comments")
+}
+
+// ----------------------------------------------------------------------------
+// OtpCodes (email verification / resend flow — replaces Laravel's Cache-based OTP storage)
+// ----------------------------------------------------------------------------
+model OtpCode {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @db.VarChar(255)
+  codeHash  String   @map("code_hash") @db.VarChar(255)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([email], map: "idx_otp_codes_email")
+  @@map("otp_codes")
+}
+
+// ----------------------------------------------------------------------------
+// RateLimitAttempts (replaces Laravel's RateLimiter facade)
+// ----------------------------------------------------------------------------
+model RateLimitAttempt {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(255)
+  count       Int      @default(0)
+  windowStart DateTime @map("window_start") @db.Timestamp(6)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(6)
+
+  @@map("rate_limit_attempts")
+}

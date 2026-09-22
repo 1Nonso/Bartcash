@@ -7,11 +7,6 @@
     "scheme": "bartcash",
     "icon": "./assets/images/bartcash_logo_dark.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/splash_icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "bundleIdentifier": "com.bartcash.app",
       "supportsTablet": true
@@ -34,7 +29,9 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image",
+      "expo-status-bar"
     ]
   }
 }

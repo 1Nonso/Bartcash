@@ -1,63 +1,12 @@
 import 'dotenv/config';
-import { db } from './config/db.config';
-import {
-   boss,
-   startQueue,
-} from './config/queue.config';
-import { QUEUES } from './queue/queue.names';
-import { runItemValuation } from './services/valuation.service';
-import type { ItemValuationJobData } from './queue/itemValuation.queue';
+import { startQueue } from './config/queue.config';
+import { registerValuationWorker } from './queue/valuation.worker';
 
+// Standalone worker process (local dev / paid hosting): `npm run worker`
 async function main() {
    await startQueue();
-
-   await boss.work<
-      ItemValuationJobData,
-      void,
-      { includeMetadata: true }
-   >(
-      QUEUES.ITEM_VALUATION,
-      {
-         includeMetadata: true,
-      } as const,
-      async ([job]) => {
-         if (!job) return;
-         const { itemId, valuationId } =
-            job.data;
-
-         try {
-            await runItemValuation(
-               itemId,
-               valuationId,
-            );
-         } catch (err) {
-            const isFinalAttempt =
-               job.retryCount >=
-               job.retryLimit;
-
-            if (isFinalAttempt) {
-               await db.itemValuation.update(
-                  {
-                     where: { itemId },
-                     data: {
-                        status:
-                           'failed',
-                        failedReason: (
-                           err as Error
-                        ).message,
-                     },
-                  },
-               );
-               return;
-            }
-            throw err;
-         }
-      },
-   );
-
-   console.log(
-      'Worker started, listening for jobs...',
-   );
+   await registerValuationWorker();
+   console.log('Worker started.');
 }
 
 main().catch((err) => {

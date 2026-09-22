@@ -24,6 +24,10 @@ app.use(
    }),
 );
 app.use(cookieparser());
+app.set('trust proxy', 1);
+app.get('/health', (_req, res) =>
+   res.json({ ok: true }),
+);
 
 // Routes
 app.use('/api/auth', authRoutes);

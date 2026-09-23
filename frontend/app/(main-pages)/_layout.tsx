@@ -9,7 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing } from "@/constants";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ─── Sell Button — elevated center tab ───────────────────────────────────────

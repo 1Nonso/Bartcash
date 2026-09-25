@@ -703,6 +703,8 @@ export async function show(
                   item.isService,
                status: item.status,
                location: item.location,
+               user_declared_value:
+                  item.userDeclaredValue,
                category: {
                   id: item.category.id,
                   name: item.category

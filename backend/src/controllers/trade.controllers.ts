@@ -1433,8 +1433,32 @@ export async function index(
             trade.proposerId === userId
                ? trade.receiver
                : trade.proposer;
-         const itemsPreview =
+         const myItemsPreview =
             trade.tradeItems
+               .filter((ti) =>
+                  trade.proposerId ===
+                  userId
+                     ? ti.side ===
+                       'proposer'
+                     : ti.side ===
+                       'receiver',
+               )
+               .map(
+                  (ti) =>
+                     ti.item.images[0]
+                        ?.url,
+               )
+               .filter(Boolean);
+         const theirItemsPreview =
+            trade.tradeItems
+               .filter((ti) =>
+                  trade.proposerId ===
+                  userId
+                     ? ti.side ===
+                       'receiver'
+                     : ti.side ===
+                       'proposer',
+               )
                .map(
                   (ti) =>
                      ti.item.images[0]
@@ -1470,7 +1494,10 @@ export async function index(
             trade_type: trade.tradeType,
             other_party:
                formatOwner(otherParty),
-            items_preview: itemsPreview,
+            my_items_preview:
+               myItemsPreview,
+            their_items_preview:
+               theirItemsPreview,
             current_offer:
                trade.status ===
                   'negotiating' &&

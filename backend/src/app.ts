@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieparser from 'cookie-parser';
+import morgan from 'morgan';
 import authRoutes from '../src/routes/auth.routes';
 import userRoutes from '../src/routes/user.routes';
 import categoryRoutes from '../src/routes/categories.routes';
@@ -16,6 +17,7 @@ import { errorHandler } from './middlewares/errorHandler.middleware';
 
 const app = express();
 
+app.use(morgan('combined'));
 app.use(express.json());
 app.use(
    cors({

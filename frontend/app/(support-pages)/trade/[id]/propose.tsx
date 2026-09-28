@@ -224,6 +224,7 @@ export default function ProposeTradeScreen() {
       const trade = await createTrade({
         receiver_id: receiverItem.owner.id,
         receiver_item_id: receiverItem.id,
+        trade_type: "item",
         offered_item_ids: selectedItemIds,
         message: message.trim() || undefined,
       });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -10,10 +10,10 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Colors,
   Layout,
@@ -21,16 +21,16 @@ import {
   Shadows,
   Spacing,
   Typography,
-} from '@/constants';
-import { useAuthTheme } from '@/constants/useAuthTheme';
-import { TradeListItem, TradeStatus, getTrades } from '@/config/trades';
+} from "@/constants";
+import { useAuthTheme } from "@/constants/useAuthTheme";
+import { TradeListItem, TradeStatus, getTrades } from "@/config/trades";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
+  if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
@@ -45,24 +45,44 @@ function statusConfig(status: TradeStatus): {
   bg: string;
 } {
   switch (status) {
-    case 'pending':
-      return { label: 'Pending', color: Colors.warning, bg: Colors.warning + '20' };
-    case 'accepted':
-      return { label: 'Accepted', color: Colors.success, bg: Colors.success + '20' };
-    case 'completed':
-      return { label: 'Completed', color: Colors.info, bg: Colors.info + '15' };
-    case 'declined':
-      return { label: 'Declined', color: Colors.danger, bg: Colors.danger + '15' };
-    case 'cancelled':
-      return { label: 'Cancelled', color: Colors.gray[500], bg: Colors.gray[100] };
-    case 'disputed':
-      return { label: 'Disputed', color: Colors.danger, bg: Colors.danger + '15' };
+    case "negotiating":
+      return {
+        label: "Negotiating",
+        color: Colors.warning,
+        bg: Colors.warning + "20",
+      };
+    case "accepted":
+      return {
+        label: "Accepted",
+        color: Colors.success,
+        bg: Colors.success + "20",
+      };
+    case "completed":
+      return { label: "Completed", color: Colors.info, bg: Colors.info + "15" };
+    case "declined":
+      return {
+        label: "Declined",
+        color: Colors.danger,
+        bg: Colors.danger + "15",
+      };
+    case "cancelled":
+      return {
+        label: "Cancelled",
+        color: Colors.gray[500],
+        bg: Colors.gray[100],
+      };
+    case "disputed":
+      return {
+        label: "Disputed",
+        color: Colors.danger,
+        bg: Colors.danger + "15",
+      };
     default:
       return { label: status, color: Colors.gray[500], bg: Colors.gray[100] };
   }
 }
 
-type InboxTab = 'chats' | 'offers';
+type InboxTab = "chats" | "offers";
 
 // ─── Chat row (active trades with messages) ───────────────────────────────────
 
@@ -102,9 +122,12 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
           </View>
         )}
         {/* Online-ish indicator — shown for accepted trades */}
-        {trade.status === 'accepted' && (
+        {trade.status === "accepted" && (
           <View
-            style={[styles.activeIndicator, { backgroundColor: Colors.success }]}
+            style={[
+              styles.activeIndicator,
+              { backgroundColor: Colors.success },
+            ]}
           />
         )}
       </View>
@@ -117,7 +140,7 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
               styles.chatName,
               {
                 color: theme.textPrimary,
-                fontWeight: hasUnread ? '700' : '500',
+                fontWeight: hasUnread ? "700" : "500",
               },
             ]}
             numberOfLines={1}
@@ -133,12 +156,12 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
             styles.chatPreview,
             {
               color: hasUnread ? theme.textPrimary : theme.textMuted,
-              fontWeight: hasUnread ? '500' : '400',
+              fontWeight: hasUnread ? "500" : "400",
             },
           ]}
           numberOfLines={1}
         >
-          {trade.last_message?.body ?? 'No messages yet'}
+          {trade.last_message?.body ?? "No messages yet"}
         </Text>
       </View>
 
@@ -146,7 +169,7 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
       {hasUnread && (
         <View style={[styles.unreadBadge, { backgroundColor: Colors.primary }]}>
           <Text style={styles.unreadText}>
-            {trade.unread_count > 9 ? '9+' : trade.unread_count}
+            {trade.unread_count > 9 ? "9+" : trade.unread_count}
           </Text>
         </View>
       )}
@@ -179,7 +202,10 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
       {/* Header */}
       <View style={styles.offerHeader}>
         {party.profile_photo ? (
-          <Image source={{ uri: party.profile_photo }} style={styles.offerAvatar} />
+          <Image
+            source={{ uri: party.profile_photo }}
+            style={styles.offerAvatar}
+          />
         ) : (
           <View
             style={[
@@ -209,16 +235,17 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
       </View>
 
       {/* Items preview */}
-      {trade.items_preview && trade.items_preview.length > 0 && (
+      {((trade.my_items_preview ?? []).length > 0 ||
+        (trade.their_items_preview ?? []).length > 0) && (
         <View
           style={[styles.offerItems, { borderTopColor: theme.borderSubtle }]}
         >
           <View style={styles.offerItemsRow}>
             <Text style={[styles.offerItemsLabel, { color: theme.textMuted }]}>
-              For Your
+              Your Offer
             </Text>
             <View style={styles.offerImageRow}>
-              {trade.items_preview.slice(0, 3).map((url, i) => (
+              {(trade.my_items_preview ?? []).slice(0, 3).map((url, i) => (
                 <Image
                   key={i}
                   source={{ uri: url }}
@@ -235,10 +262,10 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
 
           <View style={styles.offerItemsRow}>
             <Text style={[styles.offerItemsLabel, { color: theme.textMuted }]}>
-              They Offer
+              Their Offer
             </Text>
             <View style={styles.offerImageRow}>
-              {trade.items_preview.slice(0, 3).map((url, i) => (
+              {(trade.their_items_preview ?? []).slice(0, 3).map((url, i) => (
                 <Image
                   key={i}
                   source={{ uri: url }}
@@ -260,7 +287,7 @@ export default function InboxScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
 
-  const [activeTab, setActiveTab] = useState<InboxTab>('chats');
+  const [activeTab, setActiveTab] = useState<InboxTab>("chats");
   const [trades, setTrades] = useState<TradeListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -290,41 +317,39 @@ export default function InboxScreen() {
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
-  const fetchTrades = useCallback(
-    async (tab: InboxTab, cursor?: string) => {
-      try {
-        // Chats tab — accepted trades (have active messaging)
-        // Offers tab — pending trades (incoming/outgoing proposals)
-        const statusFilter: TradeStatus =
-          tab === 'chats' ? 'accepted' : 'pending';
+  const fetchTrades = useCallback(async (tab: InboxTab, cursor?: string) => {
+    try {
+      // Chats tab — accepted trades (have active messaging)
+      // Offers tab — pending trades (incoming/outgoing proposals)
 
-        const data = await getTrades({
-          status: statusFilter,
-          cursor,
-          limit: 20,
-        });
+      const statusFilter: TradeStatus =
+        tab === "chats" ? "accepted" : "negotiating";
 
-        if (cursor) {
-          setTrades((prev) => [...prev, ...data.trades]);
-        } else {
-          setTrades(data.trades);
-        }
-        setNextCursor(data.next_cursor);
+      const data = await getTrades({
+        status: statusFilter,
+        cursor,
+        limit: 20,
+      });
 
-        // Count total unread across chats
-        if (tab === 'chats') {
-          const unread = data.trades.reduce(
-            (sum, t) => sum + (t.unread_count ?? 0),
-            0
-          );
-          setTotalUnread(unread);
-        }
-      } catch (err: any) {
-        console.error('Failed to load inbox:', err);
+      if (cursor) {
+        setTrades((prev) => [...prev, ...data.trades]);
+      } else {
+        setTrades(data.trades);
       }
-    },
-    []
-  );
+      setNextCursor(data.next_cursor);
+
+      // Count total unread across chats
+      if (tab === "chats") {
+        const unread = data.trades.reduce(
+          (sum, t) => sum + (t.unread_count ?? 0),
+          0,
+        );
+        setTotalUnread(unread);
+      }
+    } catch (err: any) {
+      console.error("Failed to load inbox:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -354,21 +379,21 @@ export default function InboxScreen() {
       if (tab === activeTab) return;
       setActiveTab(tab);
     },
-    [activeTab]
+    [activeTab],
   );
 
   // ── Navigate to trade ────────────────────────────────────────────────────────
 
   const handleTradePress = useCallback((trade: TradeListItem) => {
-    if (trade.status === 'accepted') {
+    if (trade.status === "accepted") {
       // Go straight to chat for accepted trades
       router.push({
-        pathname: '/(support-pages)/chat/[tradeId]',
+        pathname: "/(support-pages)/chat/[tradeId]",
         params: { tradeId: trade.id },
       });
     } else {
       router.push({
-        pathname: '/(support-pages)/trade/[id]',
+        pathname: "/(support-pages)/trade/[id]",
         params: { id: trade.id },
       });
     }
@@ -378,16 +403,12 @@ export default function InboxScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: TradeListItem }) => {
-      if (activeTab === 'chats') {
-        return (
-          <ChatRow trade={item} onPress={() => handleTradePress(item)} />
-        );
+      if (activeTab === "chats") {
+        return <ChatRow trade={item} onPress={() => handleTradePress(item)} />;
       }
-      return (
-        <OfferCard trade={item} onPress={() => handleTradePress(item)} />
-      );
+      return <OfferCard trade={item} onPress={() => handleTradePress(item)} />;
     },
-    [activeTab, handleTradePress]
+    [activeTab, handleTradePress],
   );
 
   const renderEmpty = useCallback(
@@ -396,31 +417,31 @@ export default function InboxScreen() {
         <View style={styles.emptyState}>
           <Ionicons
             name={
-              activeTab === 'chats'
-                ? 'chatbubbles-outline'
-                : 'swap-horizontal-outline'
+              activeTab === "chats"
+                ? "chatbubbles-outline"
+                : "swap-horizontal-outline"
             }
             size={48}
             color={Colors.gray[300]}
           />
           <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-            {activeTab === 'chats' ? 'No active chats' : 'No trade offers'}
+            {activeTab === "chats" ? "No active chats" : "No trade offers"}
           </Text>
           <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
-            {activeTab === 'chats'
-              ? 'Accept a trade offer to start chatting with the other party.'
-              : 'Browse the marketplace and propose a trade to get started.'}
+            {activeTab === "chats"
+              ? "Accept a trade offer to start chatting with the other party."
+              : "Browse the marketplace and propose a trade to get started."}
           </Text>
           <TouchableOpacity
             style={[styles.emptyBtn, { backgroundColor: Colors.primary }]}
-            onPress={() => router.push('/(main-pages)/dashboard')}
+            onPress={() => router.push("/(main-pages)/dashboard")}
             activeOpacity={0.9}
           >
             <Text style={styles.emptyBtnText}>Browse Listings</Text>
           </TouchableOpacity>
         </View>
       ),
-    [loading, activeTab, theme]
+    [loading, activeTab, theme],
   );
 
   const renderSkeleton = useCallback(
@@ -447,7 +468,7 @@ export default function InboxScreen() {
               <View
                 style={[
                   styles.skeletonLine,
-                  { backgroundColor: Colors.gray[100], width: '55%' },
+                  { backgroundColor: Colors.gray[100], width: "55%" },
                 ]}
               />
               <View
@@ -455,7 +476,7 @@ export default function InboxScreen() {
                   styles.skeletonLine,
                   {
                     backgroundColor: Colors.gray[100],
-                    width: '80%',
+                    width: "80%",
                     marginTop: 6,
                   },
                 ]}
@@ -465,13 +486,13 @@ export default function InboxScreen() {
         ))}
       </View>
     ),
-    [theme]
+    [theme],
   );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        barStyle={theme.isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.bg}
       />
 
@@ -503,10 +524,13 @@ export default function InboxScreen() {
         <View
           style={[
             styles.tabsContainer,
-            { backgroundColor: theme.inputBg, borderColor: theme.borderDefault },
+            {
+              backgroundColor: theme.inputBg,
+              borderColor: theme.borderDefault,
+            },
           ]}
         >
-          {(['chats', 'offers'] as InboxTab[]).map((tab) => {
+          {(["chats", "offers"] as InboxTab[]).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <TouchableOpacity
@@ -523,9 +547,9 @@ export default function InboxScreen() {
               >
                 <Ionicons
                   name={
-                    tab === 'chats'
-                      ? 'chatbubble-ellipses-outline'
-                      : 'cube-outline'
+                    tab === "chats"
+                      ? "chatbubble-ellipses-outline"
+                      : "cube-outline"
                   }
                   size={14}
                   color={isActive ? Colors.white : theme.textMuted}
@@ -536,9 +560,9 @@ export default function InboxScreen() {
                     { color: isActive ? Colors.white : theme.textMuted },
                   ]}
                 >
-                  {tab === 'chats' ? 'Chats' : 'Offers'}
+                  {tab === "chats" ? "Chats" : "Offers"}
                 </Text>
-                {tab === 'chats' && totalUnread > 0 && (
+                {tab === "chats" && totalUnread > 0 && (
                   <View
                     style={[
                       styles.tabBadge,
@@ -557,7 +581,7 @@ export default function InboxScreen() {
                         },
                       ]}
                     >
-                      {totalUnread > 9 ? '9+' : totalUnread}
+                      {totalUnread > 9 ? "9+" : totalUnread}
                     </Text>
                   </View>
                 )}
@@ -611,7 +635,9 @@ export default function InboxScreen() {
             }
             contentContainerStyle={[
               styles.listContent,
-              { paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[4] },
+              {
+                paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[4],
+              },
             ]}
             showsVerticalScrollIndicator={false}
           />
@@ -636,7 +662,7 @@ const styles = StyleSheet.create({
 
   // Tabs
   tabsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderRadius: Radius.lg,
     borderWidth: Layout.borderWidth,
     padding: 3,
@@ -644,9 +670,9 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: Spacing[2],
     paddingVertical: Spacing[2],
     borderRadius: Radius.md,
@@ -656,11 +682,11 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 4,
   },
-  tabBadgeText: { ...Typography.micro, fontWeight: '700' },
+  tabBadgeText: { ...Typography.micro, fontWeight: "700" },
 
   content: { flex: 1 },
   listContent: {
@@ -671,22 +697,22 @@ const styles = StyleSheet.create({
 
   // Chat row
   chatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
     paddingVertical: Spacing[3],
     paddingHorizontal: Spacing[1],
     gap: Spacing[3],
   },
-  avatarWrap: { position: 'relative' },
+  avatarWrap: { position: "relative" },
   avatar: {
     width: Layout.avatarMd,
     height: Layout.avatarMd,
     borderRadius: Radius.full,
   },
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  avatarFallback: { alignItems: "center", justifyContent: "center" },
   activeIndicator: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 1,
     right: 1,
     width: 10,
@@ -697,9 +723,9 @@ const styles = StyleSheet.create({
   },
   chatContent: { flex: 1, gap: 3 },
   chatTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   chatName: { ...Typography.bodyMedium, flex: 1 },
   chatTime: { ...Typography.micro },
@@ -708,22 +734,22 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 5,
   },
-  unreadText: { ...Typography.micro, color: Colors.white, fontWeight: '700' },
+  unreadText: { ...Typography.micro, color: Colors.white, fontWeight: "700" },
 
   // Offer card
   offerCard: {
     borderRadius: Radius.lg,
     borderWidth: Layout.borderWidth,
-    overflow: 'hidden',
+    overflow: "hidden",
     ...Shadows.sm,
   },
   offerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing[2],
     padding: Spacing[3],
   },
@@ -740,35 +766,35 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: Radius.xs,
   },
-  statusText: { ...Typography.micro, fontWeight: '600' },
+  statusText: { ...Typography.micro, fontWeight: "600" },
   offerItems: {
     borderTopWidth: 1,
     padding: Spacing[3],
     gap: Spacing[2],
   },
   offerItemsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   offerItemsLabel: { ...Typography.caption },
-  offerImageRow: { flexDirection: 'row', gap: Spacing[1] },
+  offerImageRow: { flexDirection: "row", gap: Spacing[1] },
   offerItemImage: {
     width: 40,
     height: 40,
     borderRadius: Radius.sm,
   },
-  offerSwap: { alignItems: 'center' },
+  offerSwap: { alignItems: "center" },
 
   // Empty
   emptyState: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: Spacing[16],
     gap: Spacing[2],
     paddingHorizontal: Layout.screenPadding,
   },
   emptyTitle: { ...Typography.sectionTitle, marginTop: Spacing[2] },
-  emptySubtitle: { ...Typography.body, textAlign: 'center' },
+  emptySubtitle: { ...Typography.body, textAlign: "center" },
   emptyBtn: {
     marginTop: Spacing[3],
     paddingHorizontal: Spacing[6],
@@ -784,8 +810,8 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
   },
   skeletonItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
     paddingVertical: Spacing[3],
     gap: Spacing[3],
@@ -798,5 +824,5 @@ const styles = StyleSheet.create({
   skeletonContent: { flex: 1, gap: Spacing[2] },
   skeletonLine: { height: 12, borderRadius: Radius.sm },
 
-  footerLoader: { paddingVertical: Spacing[6], alignItems: 'center' },
+  footerLoader: { paddingVertical: Spacing[6], alignItems: "center" },
 });

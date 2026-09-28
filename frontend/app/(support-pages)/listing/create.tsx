@@ -223,12 +223,21 @@ export default function CreateListingScreen() {
     } catch (err: any) {
       const status = err.response?.status;
       if (status === 400) {
-        const apiErrors = err.response?.data?.errors ?? {};
-        const mapped: Record<string, string> = {};
-        Object.entries(apiErrors).forEach(([field, messages]) => {
-          mapped[field] = (messages as string[])[0];
-        });
-        setErrors(mapped);
+        const apiErrors = err.response?.data?.errors;
+        if (apiErrors) {
+          const mapped: Record<string, string> = {};
+          Object.entries(apiErrors).forEach(([field, messages]) => {
+            mapped[field] = (messages as string[])[0];
+          });
+          setErrors(mapped);
+        } else {
+          Alert.alert(
+            "Upload failed",
+            err.response?.data?.description ??
+              err.response?.data?.message ??
+              "Please try again.",
+          );
+        }
       } else if (status === 404) {
         setErrors({ category: "Invalid category. Please try again." });
       } else {

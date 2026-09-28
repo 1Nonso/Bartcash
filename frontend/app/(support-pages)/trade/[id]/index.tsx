@@ -27,6 +27,8 @@ import { useAuthTheme } from "@/constants/useAuthTheme";
 import {
   Trade,
   TradeItem,
+  TradeOfferHistoryEntry,
+  CurrentOffer,
   acceptTrade,
   cancelTrade,
   completeTrade,
@@ -43,12 +45,8 @@ function statusConfig(status: string): {
   bg: string;
 } {
   switch (status) {
-    case "pending":
-      return {
-        label: "Pending",
-        color: Colors.warning,
-        bg: Colors.warning + "20",
-      };
+    case "negotiating":
+      return { label: "Negotiating", color: "#D97706", bg: "#D9770620" };
     case "accepted":
       return {
         label: "Accepted",
@@ -162,6 +160,125 @@ function TradeItemCard({ item, label }: TradeItemCardProps) {
   );
 }
 
+function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
+  const theme = useAuthTheme();
+  return (
+    <View
+      style={[
+        styles.tradeItemCard,
+        { backgroundColor: theme.surface, borderColor: theme.cardBorder },
+      ]}
+    >
+      <Text style={[styles.tradeItemLabel, { color: theme.textMuted }]}>
+        CURRENT OFFER
+      </Text>
+      {offer.trade_type === "cash" ? (
+        <Text style={[styles.offerAmount, { color: theme.textPrimary }]}>
+          {offer.cash_amount
+            ? `₦${Number(offer.cash_amount).toLocaleString()}`
+            : "—"}
+        </Text>
+      ) : (
+        <>
+          <View style={styles.offerItemsRow}>
+            {offer.offered_items.map((item) => (
+              <View key={item.id} style={styles.offerItemThumb}>
+                {item.primary_image ? (
+                  <Image
+                    source={{ uri: item.primary_image }}
+                    style={styles.offerItemThumbImg}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.offerItemThumbImg,
+                      { backgroundColor: Colors.gray[100] },
+                    ]}
+                  />
+                )}
+              </View>
+            ))}
+          </View>
+          {offer.top_up_amount && Number(offer.top_up_amount) > 0 && (
+            <Text style={[styles.offerTopUpText, { color: theme.textMuted }]}>
+              Plus a cash top-up of ₦
+              {Number(offer.top_up_amount).toLocaleString()}
+            </Text>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+function OfferHistorySection({
+  history,
+  currentUserId,
+}: {
+  history: TradeOfferHistoryEntry[];
+  currentUserId: string | null;
+}) {
+  const theme = useAuthTheme();
+  const [expanded, setExpanded] = useState(false);
+  if (history.length === 0) return null;
+
+  return (
+    <View
+      style={[
+        styles.tradeItemCard,
+        { backgroundColor: theme.surface, borderColor: theme.cardBorder },
+      ]}
+    >
+      <TouchableOpacity
+        style={styles.historyHeader}
+        onPress={() => setExpanded((e) => !e)}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+          Offer History
+        </Text>
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={16}
+          color={theme.textMuted}
+        />
+      </TouchableOpacity>
+      {expanded &&
+        history.map((entry, i) => {
+          const isMe = entry.offered_by === currentUserId;
+          return (
+            <View key={entry.id} style={styles.historyRow}>
+              <Text style={[styles.historyMeta, { color: theme.textMuted }]}>
+                Round {i + 1} · {isMe ? "You" : "Them"}
+              </Text>
+              <Text
+                style={[styles.historyDetail, { color: theme.textPrimary }]}
+              >
+                {entry.trade_type === "cash"
+                  ? entry.cash_amount
+                    ? `₦${Number(entry.cash_amount).toLocaleString()}`
+                    : "—"
+                  : `${entry.offered_item_ids.length} item(s)${
+                      entry.top_up_amount && Number(entry.top_up_amount) > 0
+                        ? ` + ₦${Number(entry.top_up_amount).toLocaleString()} top-up`
+                        : ""
+                    }`}
+              </Text>
+              <Text style={[styles.historyTime, { color: theme.textMuted }]}>
+                {new Date(entry.created_at).toLocaleString([], {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </View>
+          );
+        })}
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function TradeDetailScreen() {
@@ -215,50 +332,29 @@ export default function TradeDetailScreen() {
   const isProposer = trade?.proposer?.id === currentUserId;
   const isReceiver = trade?.receiver?.id === currentUserId;
   const otherParty = isProposer ? trade?.receiver : trade?.proposer;
+  const isMyTurn =
+    trade?.status === "negotiating" &&
+    trade?.awaiting_response_from === currentUserId;
+  const tradeTypeLabel =
+    trade?.trade_type === "cash" ? "Cash Trade" : "Item Trade";
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const handleAccept = useCallback(() => {
     if (!id) return;
-    Alert.alert("Accept Trade", "How will you complete this trade?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Meetup",
-        onPress: async () => {
-          setActionLoading("accept");
-          try {
-            const updated = await acceptTrade(id, "meetup");
-            setTrade((prev) => (prev ? { ...prev, ...updated } : prev));
-          } catch (err: any) {
-            Alert.alert(
-              "Error",
-              err.response?.data?.message ?? "Failed to accept trade.",
-            );
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-      {
-        text: "Delivery",
-        onPress: async () => {
-          setActionLoading("accept");
-          try {
-            const updated = await acceptTrade(id, "delivery");
-            setTrade((prev) => (prev ? { ...prev, ...updated } : prev));
-          } catch (err: any) {
-            Alert.alert(
-              "Error",
-              err.response?.data?.message ?? "Failed to accept trade.",
-            );
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
+    router.push({
+      pathname: "/(support-pages)/trade/[id]/agreement",
+      params: { id },
+    });
   }, [id]);
 
+  const handleRebargain = useCallback(() => {
+    if (!id) return;
+    router.push({
+      pathname: "/(support-pages)/trade/[id]/rebargain",
+      params: { id },
+    });
+  }, [id]);
   const handleDecline = useCallback(() => {
     if (!id) return;
     Alert.alert(
@@ -343,11 +439,25 @@ export default function TradeDetailScreen() {
     );
   }, [id]);
 
+  const canChat = trade?.status === "accepted";
+
   const handleOpenChat = useCallback(() => {
     if (!id) return;
+    if (!canChat) {
+      Alert.alert("Chat Locked", "Chat unlocks once terms are agreed.");
+      return;
+    }
     router.push({
       pathname: "/(support-pages)/chat/[tradeId]",
       params: { tradeId: id },
+    });
+  }, [id, canChat]);
+
+  const handleRate = useCallback(() => {
+    if (!id) return;
+    router.push({
+      pathname: "/(support-pages)/trade/[id]/rate",
+      params: { id },
     });
   }, [id]);
 
@@ -355,14 +465,6 @@ export default function TradeDetailScreen() {
     if (!id) return;
     router.push({
       pathname: "/(support-pages)/trade/[id]/dispute",
-      params: { id },
-    });
-  }, [id]);
-
-  const handleRate = useCallback(() => {
-    if (!id) return;
-    router.push({
-      pathname: "/(support-pages)/trade/[id]/rate",
       params: { id },
     });
   }, [id]);
@@ -443,6 +545,52 @@ export default function TradeDetailScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
+        {trade.status === "negotiating" && (
+          <>
+            <View
+              style={[
+                styles.tradeTypeBadge,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.cardBorder,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tradeTypeBadgeText,
+                  { color: theme.textPrimary },
+                ]}
+              >
+                {tradeTypeLabel}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.turnSubheader,
+                {
+                  color: isMyTurn ? "#D97706" : theme.textMuted,
+                  fontWeight: isMyTurn ? "700" : "400",
+                },
+              ]}
+            >
+              {isMyTurn
+                ? "Your turn to respond"
+                : `Waiting for ${otherParty?.first_name}...`}
+            </Text>
+          </>
+        )}
+
+        {trade.status === "negotiating" && trade.current_offer && (
+          <CurrentOfferCard offer={trade.current_offer} />
+        )}
+        {trade.status === "negotiating" && (
+          <OfferHistorySection
+            history={trade.offer_history ?? []}
+            currentUserId={currentUserId}
+          />
+        )}
+
         {/* ── Parties ── */}
         <View
           style={[
@@ -746,70 +894,146 @@ export default function TradeDetailScreen() {
         ]}
       >
         {/* Pending — receiver sees Accept + Decline */}
-        {trade.status === "pending" && isReceiver && (
-          <View style={styles.ctaRow}>
-            <TouchableOpacity
-              style={[
-                styles.ctaSecondary,
-                {
-                  borderColor: Colors.danger,
-                  opacity: actionLoading ? 0.6 : 1,
-                },
-              ]}
-              onPress={handleDecline}
-              disabled={!!actionLoading}
-              activeOpacity={0.85}
-            >
-              {actionLoading === "decline" ? (
-                <ActivityIndicator size="small" color={Colors.danger} />
-              ) : (
+        {trade.status === "negotiating" && isMyTurn && (
+          <View>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity
+                style={[
+                  styles.ctaSecondary,
+                  {
+                    borderColor: Colors.danger,
+                    opacity: actionLoading ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleDecline}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
                 <Text
                   style={[styles.ctaSecondaryText, { color: Colors.danger }]}
                 >
                   Decline
                 </Text>
-              )}
-            </TouchableOpacity>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.ctaSecondary,
+                  {
+                    borderColor: theme.borderDefault,
+                    opacity: actionLoading ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleRebargain}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.ctaSecondaryText,
+                    { color: theme.textPrimary },
+                  ]}
+                >
+                  Re-Bargain
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.ctaPrimary,
+                  {
+                    backgroundColor: Colors.primary,
+                    opacity: actionLoading ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleAccept}
+                disabled={!!actionLoading}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.ctaPrimaryText}>Accept Terms</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={[
-                styles.ctaPrimary,
+                styles.ctaSecondary,
                 {
-                  backgroundColor: Colors.success,
-                  opacity: actionLoading ? 0.6 : 1,
+                  borderColor: theme.borderSubtle,
+                  opacity: 0.5,
+                  marginTop: Spacing[2],
                 },
               ]}
-              onPress={handleAccept}
-              disabled={!!actionLoading}
-              activeOpacity={0.9}
+              onPress={handleOpenChat}
+              activeOpacity={0.85}
             >
-              {actionLoading === "accept" ? (
-                <ActivityIndicator color={Colors.white} />
-              ) : (
-                <Text style={styles.ctaPrimaryText}>Accept Trade</Text>
-              )}
+              <Ionicons
+                name="lock-closed-outline"
+                size={16}
+                color={theme.textMuted}
+              />
+              <Text
+                style={[styles.ctaSecondaryText, { color: theme.textMuted }]}
+              >
+                Chat unlocks once terms are agreed
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Pending — proposer sees Cancel */}
-        {trade.status === "pending" && isProposer && (
-          <TouchableOpacity
-            style={[
-              styles.ctaSecondary,
-              { borderColor: Colors.danger, opacity: actionLoading ? 0.6 : 1 },
-            ]}
-            onPress={handleCancel}
-            disabled={!!actionLoading}
-            activeOpacity={0.85}
-          >
-            {actionLoading === "cancel" ? (
-              <ActivityIndicator size="small" color={Colors.danger} />
-            ) : (
-              <Text style={[styles.ctaSecondaryText, { color: Colors.danger }]}>
-                Cancel Proposal
+        {trade.status === "negotiating" && !isMyTurn && (
+          <View>
+            <View
+              style={[
+                styles.waitingBadge,
+                { backgroundColor: Colors.warning + "20" },
+              ]}
+            >
+              <Text style={[styles.waitingText, { color: Colors.warning }]}>
+                Awaiting {otherParty?.first_name}'s response.
               </Text>
+            </View>
+            {isProposer && (
+              <TouchableOpacity
+                style={[
+                  styles.ctaSecondary,
+                  {
+                    borderColor: Colors.danger,
+                    marginTop: Spacing[2],
+                    opacity: actionLoading ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleCancel}
+                disabled={!!actionLoading}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[styles.ctaSecondaryText, { color: Colors.danger }]}
+                >
+                  Cancel Proposal
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.ctaSecondary,
+                {
+                  borderColor: theme.borderSubtle,
+                  opacity: 0.5,
+                  marginTop: Spacing[2],
+                },
+              ]}
+              onPress={handleOpenChat}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={16}
+                color={theme.textMuted}
+              />
+              <Text
+                style={[styles.ctaSecondaryText, { color: theme.textMuted }]}
+              >
+                Chat unlocks once terms are agreed
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Accepted — Open Chat + Mark Complete */}
@@ -1105,4 +1329,36 @@ const styles = StyleSheet.create({
   waitingText: { ...Typography.captionMedium, textAlign: "center" },
   disputeLink: { alignItems: "center", paddingVertical: Spacing[1] },
   disputeLinkText: { ...Typography.caption, textDecorationLine: "underline" },
+  tradeTypeBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[1],
+    borderRadius: Radius.md,
+    borderWidth: Layout.borderWidth,
+  },
+  tradeTypeBadgeText: { ...Typography.captionMedium },
+  turnSubheader: { ...Typography.body },
+  offerAmount: { fontSize: 28, fontWeight: "700" },
+  offerItemsRow: {
+    flexDirection: "row",
+    gap: Spacing[2],
+    marginTop: Spacing[2],
+  },
+  offerItemThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.md,
+    overflow: "hidden",
+  },
+  offerItemThumbImg: { width: "100%", height: "100%" },
+  offerTopUpText: { ...Typography.caption, marginTop: Spacing[2] },
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  historyRow: { paddingTop: Spacing[3], gap: 2 },
+  historyMeta: { ...Typography.captionMedium },
+  historyDetail: { ...Typography.body },
+  historyTime: { ...Typography.micro },
 });

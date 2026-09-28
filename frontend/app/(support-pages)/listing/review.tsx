@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,14 +7,12 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Layout, Radius, Spacing, Typography } from "@/constants";
@@ -25,7 +23,7 @@ import {
   getItemById,
   getItemValuation,
   updateItem,
-  overrideItemValuation,
+  retryItemValuation,
 } from "@/config/items";
 
 const POLL_INTERVAL = 5000;
@@ -50,16 +48,23 @@ export default function ReviewListingScreen() {
   const [valuation, setValuation] = useState<ItemValuationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
-
-  const [overrideEnabled, setOverrideEnabled] = useState(false);
-  const [overrideMin, setOverrideMin] = useState("");
-  const [overrideMax, setOverrideMax] = useState("");
+  const [declaredValue, setDeclaredValue] = useState("");
+  const [retrying, setRetrying] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const contentAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+
+  const CONFIDENCE_LEVELS: Record<
+    string,
+    { label: string; bars: number; color: string }
+  > = {
+    high: { label: "High Confidence", bars: 3, color: Colors.success },
+    medium: { label: "Medium Confidence", bars: 2, color: Colors.ai },
+    low: { label: "Low Confidence", bars: 1, color: Colors.danger },
+  };
 
   // ── Load item ────────────────────────────────────────────────────────────────
 
@@ -147,33 +152,26 @@ export default function ReviewListingScreen() {
   };
 
   // ── Publish ──────────────────────────────────────────────────────────────────
-
   const handlePublish = useCallback(async () => {
     if (!item) return;
 
-    if (overrideEnabled) {
-      const min = parseFloat(overrideMin);
-      const max = parseFloat(overrideMax);
-      if (!overrideMin || !overrideMax || isNaN(min) || isNaN(max)) {
-        Alert.alert(
-          "Invalid Values",
-          "Please enter valid min and max override values.",
-        );
-        return;
-      }
-      if (min >= max) {
-        Alert.alert("Invalid Range", "Min value must be less than max value.");
+    if (declaredValue) {
+      const val = parseFloat(declaredValue);
+      if (isNaN(val) || val <= 0) {
+        Alert.alert("Invalid Value", "Please enter a valid declared value.");
         return;
       }
     }
 
     setPublishing(true);
     try {
-      if (overrideEnabled && overrideMin && overrideMax) {
-        await overrideItemValuation(item.id, {
-          value_min: parseFloat(overrideMin),
-          value_max: parseFloat(overrideMax),
+      if (declaredValue) {
+        const { warnings } = await updateItem(item.id, {
+          user_declared_value: parseFloat(declaredValue),
         });
+        if (warnings?.user_declared_value) {
+          Alert.alert("Heads up", warnings.user_declared_value);
+        }
       }
 
       router.replace({
@@ -188,32 +186,43 @@ export default function ReviewListingScreen() {
     } finally {
       setPublishing(false);
     }
-  }, [item, overrideEnabled, overrideMin, overrideMax]);
+  }, [item, declaredValue]);
 
-  // const handleEditDetails = useCallback(() => {
-  //   goBack();
-  // }, []);
   const handleEditDetails = useCallback(() => {
     router.replace({
       pathname: "/(support-pages)/listing/create",
     });
   }, []);
 
+  const handleRetryValuation = useCallback(async () => {
+    if (!item) return;
+    setRetrying(true);
+    try {
+      await retryItemValuation(item.id);
+      setValuation((prev) => (prev ? { ...prev, status: "pending" } : prev));
+      startPolling(item.id);
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err.response?.data?.message ?? "Could not retry valuation.",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  }, [item, startPolling]);
+
   // ── Valuation section ────────────────────────────────────────────────────────
 
   const ValuationSection = () => {
-    const confidence = parseFloat(valuation?.confidence ?? "0");
+    const level =
+      valuation?.status === "completed" && valuation.confidence
+        ? CONFIDENCE_LEVELS[valuation.confidence]
+        : null;
     const aiRange =
       valuation?.status === "completed" &&
       valuation.value_min &&
       valuation.value_max
-        ? `$${Number(valuation.value_min).toLocaleString()} – ₦${Number(valuation.value_max).toLocaleString()}`
-        : null;
-
-    // Build override preview range (shown live as the user types)
-    const overrideRange =
-      overrideEnabled && overrideMin && overrideMax
-        ? `$${Number(overrideMin).toLocaleString()} – ₦${Number(overrideMax).toLocaleString()}`
+        ? `₦${Number(valuation.value_min).toLocaleString()} – ₦${Number(valuation.value_max).toLocaleString()}`
         : null;
 
     return (
@@ -234,7 +243,7 @@ export default function ReviewListingScreen() {
           </View>
         )}
 
-        {valuation?.status === "completed" && aiRange && (
+        {valuation?.status === "completed" && aiRange && level && (
           <>
             <Text style={styles.valuationRange}>{aiRange}</Text>
             <Text style={[styles.valuationSub, { color: theme.textMuted }]}>
@@ -247,29 +256,22 @@ export default function ReviewListingScreen() {
               >
                 Confidence level
               </Text>
-              <Text style={styles.confidenceValue}>
-                {confidence.toFixed(0)}%
-              </Text>
+              <View style={styles.confidenceBars}>
+                {[0, 1, 2].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.confidenceBar,
+                      {
+                        backgroundColor:
+                          i < level.bars ? level.color : Colors.aiLight,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
-            <View
-              style={[
-                styles.progressTrack,
-                { backgroundColor: Colors.aiLight },
-              ]}
-            >
-              <Animated.View
-                style={[
-                  styles.progressFill,
-                  {
-                    backgroundColor: Colors.ai,
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0%", "100%"],
-                    }),
-                  },
-                ]}
-              />
-            </View>
+
             <View
               style={[
                 styles.confidenceNote,
@@ -282,105 +284,71 @@ export default function ReviewListingScreen() {
                 color={Colors.ai}
               />
               <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
-                {confidence >= 80
-                  ? "High Confidence based on similar items"
-                  : confidence >= 50
-                    ? "Medium Confidence — estimate may vary"
-                    : "Low Confidence — limited data available"}
+                {level.label}
+                {level.bars === 1 ? " — estimate may vary" : ""}
               </Text>
             </View>
           </>
         )}
 
         {valuation?.status === "failed" && (
-          <Text style={[styles.failedText, { color: theme.textMuted }]}>
-            Value estimate unavailable. You can publish without a valuation.
-          </Text>
+          <View>
+            <Text style={[styles.failedText, { color: theme.textMuted }]}>
+              Value estimate unavailable. You can publish without one, or try
+              again.
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: theme.borderDefault }]}
+              onPress={handleRetryValuation}
+              disabled={retrying}
+              activeOpacity={0.85}
+            >
+              {retrying ? (
+                <ActivityIndicator size="small" color={Colors.ai} />
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={14} color={Colors.ai} />
+                  <Text style={[styles.retryBtnText, { color: Colors.ai }]}>
+                    Retry valuation
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* Override toggle */}
         <View
           style={[
             styles.overrideDivider,
             { borderTopColor: theme.borderSubtle },
           ]}
         />
-        <View style={styles.overrideRow}>
-          <View style={styles.overrideLabel}>
-            <Text
-              style={[styles.overrideLabelText, { color: theme.textPrimary }]}
-            >
-              Override AI value
-            </Text>
-            <Text style={[styles.overrideLabelSub, { color: theme.textMuted }]}>
-              Set your own value range
-            </Text>
-          </View>
-          <Switch
-            value={overrideEnabled}
-            onValueChange={setOverrideEnabled}
-            trackColor={{ false: Colors.gray[200], true: Colors.ai }}
-            thumbColor={Colors.white}
-          />
-        </View>
-
-        {overrideEnabled && (
-          <>
-            <View style={styles.overrideInputs}>
-              <TextInput
-                style={[
-                  styles.overrideInput,
-                  {
-                    backgroundColor: theme.inputBg,
-                    borderColor: theme.borderDefault,
-                    color: theme.textPrimary,
-                  },
-                ]}
-                placeholder="Min Value (₦)"
-                placeholderTextColor={theme.textPlaceholder}
-                value={overrideMin}
-                onChangeText={setOverrideMin}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={[
-                  styles.overrideInput,
-                  {
-                    backgroundColor: theme.inputBg,
-                    borderColor: theme.borderDefault,
-                    color: theme.textPrimary,
-                  },
-                ]}
-                placeholder="Max Value (₦)"
-                placeholderTextColor={theme.textPlaceholder}
-                value={overrideMax}
-                onChangeText={setOverrideMax}
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Live preview of override range */}
-            {overrideRange && (
-              <View
-                style={[
-                  styles.overridePreview,
-                  { backgroundColor: Colors.aiLight },
-                ]}
-              >
-                <Ionicons name="pricetag-outline" size={13} color={Colors.ai} />
-                <Text
-                  style={[styles.overridePreviewText, { color: Colors.ai }]}
-                >
-                  Your value:{" "}
-                  <Text style={styles.overridePreviewBold}>
-                    {overrideRange}
-                  </Text>{" "}
-                  will appear on your listing
-                </Text>
-              </View>
-            )}
-          </>
-        )}
+        <Text style={[styles.overrideLabelText, { color: theme.textPrimary }]}>
+          Your Declared Value
+        </Text>
+        <Text
+          style={[
+            styles.overrideLabelSub,
+            { color: theme.textMuted, marginBottom: Spacing[2] },
+          ]}
+        >
+          Optional — what you think it's worth
+        </Text>
+        <TextInput
+          style={[
+            styles.overrideInput,
+            {
+              backgroundColor: theme.inputBg,
+              borderColor: theme.borderDefault,
+              color: theme.textPrimary,
+            },
+          ]}
+          placeholder="Enter your value (₦)"
+          placeholderTextColor={theme.textPlaceholder}
+          value={declaredValue}
+          onChangeText={setDeclaredValue}
+          keyboardType="numeric"
+        />
       </View>
     );
   };
@@ -669,14 +637,19 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[2],
   },
   confidenceLabel: { ...Typography.caption },
-  confidenceValue: { ...Typography.captionMedium, color: Colors.ai },
-  progressTrack: {
-    height: 6,
-    borderRadius: Radius.full,
-    overflow: "hidden",
-    marginBottom: Spacing[3],
+  confidenceBars: { flexDirection: "row", gap: 4 },
+  confidenceBar: { width: 24, height: 6, borderRadius: Radius.full },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    borderWidth: Layout.borderWidth,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing[2],
+    marginTop: Spacing[3],
   },
-  progressFill: { height: "100%", borderRadius: Radius.full },
+  retryBtnText: { ...Typography.captionMedium },
   confidenceNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -687,19 +660,9 @@ const styles = StyleSheet.create({
   confidenceNoteText: { ...Typography.micro, flex: 1 },
   failedText: { ...Typography.body },
   overrideDivider: { borderTopWidth: 1, marginVertical: Spacing[4] },
-  overrideRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   overrideLabel: { flex: 1 },
   overrideLabelText: { ...Typography.bodyMedium },
   overrideLabelSub: { ...Typography.caption, marginTop: 2 },
-  overrideInputs: {
-    flexDirection: "row",
-    gap: Spacing[3],
-    marginTop: Spacing[3],
-  },
   overrideInput: {
     flex: 1,
     height: Layout.inputHeight,
@@ -708,16 +671,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[4],
     ...Typography.input,
   },
-  overridePreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing[2],
-    padding: Spacing[2],
-    borderRadius: Radius.sm,
-    marginTop: Spacing[2],
-  },
-  overridePreviewText: { ...Typography.micro, flex: 1 },
-  overridePreviewBold: { fontWeight: "700" },
 
   // Preview card
   previewCard: {

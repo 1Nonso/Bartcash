@@ -14,7 +14,7 @@
  *  4b. Only one confirmed → navigate back to Trade Detail
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,

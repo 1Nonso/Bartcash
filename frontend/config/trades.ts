@@ -39,15 +39,7 @@ export interface TradeParty {
 export interface TradeItem {
   id: string;
   title: string;
-  condition: string;
-  status: string;
   primary_image: string | null;
-  valuation: {
-    value_min: string | null;
-    value_max: string | null;
-    status: string;
-  } | null;
-  images: { id: string; url: string; is_primary: boolean }[];
 }
 
 export interface TradeMessage {
@@ -73,7 +65,7 @@ export interface Trade {
   delivery_details?: string | null;
   proposer_confirmed: boolean;
   receiver_confirmed: boolean;
-  completed_at: string | null;
+  completed_at?: string | null;
   proposer: TradeParty;
   receiver: TradeParty;
   proposer_items: TradeItem[];
@@ -211,7 +203,8 @@ export async function acceptTrade(
     completion_method,
     ...details,
   });
-  return response.data.data; // { trade: {...}, transaction: { id } } — flattened below
+  const { trade, transaction } = response.data.data;
+  return { ...trade, transaction };
 }
 
 /**

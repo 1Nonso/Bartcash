@@ -1,4 +1,7 @@
 import api from "./api";
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+import Constants from "expo-constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,7 +13,7 @@ export type NotificationType =
   | "trade_completed"
   | "new_message"
   | "dispute_raised"
-  | "trade_completion_reminder";
+  | "trade_pending";
 
 export interface AppNotification {
   id: string;
@@ -30,6 +33,37 @@ export interface NotificationsResponse {
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+export async function registerForPushNotifications(): Promise<void> {
+  if (!Device.isDevice) return; // simulators/emulators have no push token
+
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  let status = existing;
+  if (status !== "granted") {
+    const req = await Notifications.requestPermissionsAsync();
+    status = req.status;
+  }
+  if (status !== "granted") return;
+
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  const { data: token } = await Notifications.getExpoPushTokenAsync({
+    projectId,
+  });
+
+  try {
+    await api.patch("/user/push-token", { push_token: token });
+  } catch (err) {
+    console.error("Failed to register push token:", err);
+  }
+}
 
 /**
  * Get paginated notifications for authenticated user.

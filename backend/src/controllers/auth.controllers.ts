@@ -827,7 +827,7 @@ export async function forgotPassword(
       },
    });
 
-   const resetLink = `bartcash://reset-password?token=${plainToken}`;
+   const resetLink = `${process.env.API_BASE_URL}/reset-password-redirect?token=${plainToken}`;
    await sendPasswordResetEmail(
       user.email,
       resetLink,
@@ -951,4 +951,28 @@ export async function resetPassword(
          description:
             'Password reset successfully. Please log in with your new password.',
       });
+}
+
+export async function resetPasswordRedirect(
+   req: Request,
+   res: Response,
+) {
+   const token = req.query
+      .token as string;
+   const appLink = `bartcash://reset-password?token=${encodeURIComponent(token ?? '')}`;
+
+   res.set('Content-Type', 'text/html')
+      .send(`
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8" /></head>
+        <body style="font-family: sans-serif; text-align:center; padding-top: 60px;">
+          <p>Opening Bartcash…</p>
+          <p>If nothing happens, <a href="${appLink}">tap here to open the app</a>.</p>
+          <script>
+            window.location.href = ${JSON.stringify(appLink)};
+          </script>
+        </body>
+      </html>
+   `);
 }

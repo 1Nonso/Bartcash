@@ -11,6 +11,7 @@ import {
    updateProfile,
    updateAvatar,
    deleteAccount,
+   updatePushToken,
 } from '../controllers/user.controllers';
 
 const router = Router();
@@ -62,6 +63,11 @@ router.delete(
    requireAuth,
    validate(deleteAccountSchema),
    deleteAccount,
+);
+router.patch(
+   '/push-token',
+   requireAuth,
+   updatePushToken,
 );
 
 export default router;

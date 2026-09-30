@@ -28,6 +28,13 @@
           "resizeMode": "contain"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       "expo-image",

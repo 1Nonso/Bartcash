@@ -1274,6 +1274,16 @@ export async function complete(
       );
    } else {
       // TODO: Notification + push dispatch prompting the other party to confirm
+      await notify({
+         userId: isProposer
+            ? trade.receiverId
+            : trade.proposerId,
+         type: 'trade_pending',
+         title: 'Confirm trade completion',
+         body: 'The other party confirmed the exchange. Please confirm on your side.',
+         referenceId: id,
+         referenceType: 'Trade',
+      });
    }
 
    return res
@@ -1697,6 +1707,10 @@ export async function show(
                      : null,
                completion_method:
                   trade.completionMethod,
+               proposer_confirmed:
+                  trade.proposerConfirmed,
+               receiver_confirmed:
+                  trade.receiverConfirmed,
                meetup_details:
                   trade.meetupDetails,
                delivery_details:

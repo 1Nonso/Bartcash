@@ -31,15 +31,15 @@ import api from "@/config/api";
 
 interface UserProfile {
   id: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  profile_photo: string | null;
+  profilePhoto: string | null;
   bio: string | null;
   location: string | null;
-  average_rating: string;
-  total_trades: number;
-  created_at: string;
+  averageRating: string;
+  totalTrades: number;
+  createdAt: string;
 }
 
 interface Rating {
@@ -264,8 +264,8 @@ export default function ProfileScreen() {
 
   if (!profile) return null;
 
-  const fullName = `${profile.first_name} ${profile.last_name}`;
-  const rating = parseFloat(profile.average_rating ?? "0").toFixed(1);
+  const fullName = `${profile.firstName} ${profile.lastName}`;
+  const rating = parseFloat(profile.averageRating ?? "0").toFixed(1);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -305,9 +305,9 @@ export default function ProfileScreen() {
         >
           {/* Avatar */}
           <View style={styles.avatarSection}>
-            {profile.profile_photo ? (
+            {profile.profilePhoto ? (
               <Image
-                source={{ uri: profile.profile_photo }}
+                source={{ uri: profile.profilePhoto }}
                 style={styles.avatar}
               />
             ) : (
@@ -321,8 +321,8 @@ export default function ProfileScreen() {
                 <Text
                   style={[styles.avatarInitials, { color: Colors.gray[600] }]}
                 >
-                  {profile.first_name[0]}
-                  {profile.last_name[0]}
+                  {profile.firstName[0]}
+                  {profile.lastName[0]}
                 </Text>
               </View>
             )}
@@ -347,7 +347,7 @@ export default function ProfileScreen() {
           )}
 
           <Text style={[styles.memberSince, { color: theme.textMuted }]}>
-            Member since {memberSince(profile.created_at)}
+            Member since {memberSince(profile.createdAt)}
           </Text>
 
           {/* Stats */}
@@ -356,7 +356,7 @@ export default function ProfileScreen() {
           >
             {[
               { label: "Listings", value: listings.length.toString() },
-              { label: "Trades", value: profile.total_trades.toString() },
+              { label: "Trades", value: profile.totalTrades.toString() },
               { label: "Reviews", value: totalRatings.toString() },
             ].map((stat, i) => (
               <React.Fragment key={stat.label}>

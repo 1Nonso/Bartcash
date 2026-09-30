@@ -90,6 +90,7 @@ export interface ItemDetail {
   is_service: boolean;
   status: string;
   location: string | null;
+  user_declared_value: string | null;
   category: Category;
   images: ItemImage[];
   valuation: ItemValuationDetail | null;
@@ -116,6 +117,7 @@ export interface UpdateItemPayload {
   condition?: "new" | "good" | "fair" | "poor";
   desired_trade?: string;
   location?: string;
+  user_declared_value?: number;
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
@@ -187,8 +189,8 @@ export async function uploadItemImages(
   images: { uri: string; name: string; type: string }[],
 ): Promise<{ images: ItemImage[]; valuation_status: string }> {
   const formData = new FormData();
-  images.forEach((img, index) => {
-    formData.append(`images[${index}]`, {
+  images.forEach((img) => {
+    formData.append("images", {
       uri: img.uri,
       name: img.name,
       type: img.type,
@@ -208,9 +210,9 @@ export async function uploadItemImages(
 export async function updateItem(
   id: string,
   payload: UpdateItemPayload,
-): Promise<ItemDetail> {
+): Promise<{ item: ItemDetail; warnings?: Record<string, string> }> {
   const response = await api.put(`/items/${id}`, payload);
-  return response.data.data.item;
+  return { item: response.data.data.item, warnings: response.data.warnings };
 }
 
 /**

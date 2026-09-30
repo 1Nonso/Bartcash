@@ -102,13 +102,17 @@ function isSameDay(a: string, b: string): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-function isClosedTrade(status: string): boolean {
-  return ["completed", "cancelled", "declined", "disputed"].includes(status);
+// function isClosedTrade(status: string): boolean {
+//   return ["completed", "cancelled", "declined", "disputed"].includes(status);
+// }
+
+function canSendInThisTrade(status: string): boolean {
+  return status === "accepted";
 }
 
 function getTradeStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    pending: "Pending",
+    negotiating: "Negotiating",
     accepted: "Active",
     completed: "Completed",
     cancelled: "Cancelled",
@@ -120,7 +124,7 @@ function getTradeStatusLabel(status: string): string {
 
 function getTradeStatusColor(status: string): string {
   const map: Record<string, string> = {
-    pending: Colors.warning,
+    negotiating: Colors.warning,
     accepted: Colors.success,
     completed: Colors.ai,
     cancelled: Colors.text.tertiary,
@@ -721,7 +725,10 @@ export default function ChatThreadScreen() {
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
-  const isClosed = trade ? isClosedTrade(trade.status) : false;
+  // const isClosed = trade ? isClosedTrade(trade.status) : false;
+
+  const isClosed = trade ? !canSendInThisTrade(trade.status) : true;
+  const isPreAcceptance = trade?.status === "negotiating";
   const canSend = inputText.trim().length > 0 && !isClosed;
 
   const otherParty = useMemo(() => {
@@ -733,9 +740,11 @@ export default function ChatThreadScreen() {
 
   // Build message list items with date dividers
   const listData = useMemo(() => {
-    const result: (| { type: "message"; data: LocalMessage }
+    const result: (
+      | { type: "message"; data: LocalMessage }
       | { type: "divider"; label: string; key: string }
-      | { type: "load-older"; key: string })[] = [];
+      | { type: "load-older"; key: string }
+    )[] = [];
 
     if (nextCursor) {
       result.push({ type: "load-older", key: "load-older" });
@@ -1063,8 +1072,10 @@ export default function ChatThreadScreen() {
               color={theme.textMuted}
             />
             <Text style={[styles.closedBarText, { color: theme.textMuted }]}>
-              This trade is closed. Messaging is disabled.
-            </Text>
+              {isPreAcceptance
+                ? "Chat unlocks once both parties agree on the trade terms."
+                : "This trade is closed. Messaging is disabled."}
+            </Text>{" "}
           </View>
         ) : (
           <View style={styles.inputBar}>

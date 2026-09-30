@@ -14,6 +14,7 @@ import commentRoutes from '../src/routes/comment.routes';
 import notificationRoutes from '../src/routes/notification.routes';
 import messageRoutes from '../src/routes/message.routes';
 import { errorHandler } from './middlewares/errorHandler.middleware';
+import { resetPasswordRedirect } from './controllers/auth.controllers';
 
 const app = express();
 
@@ -29,6 +30,10 @@ app.use(cookieparser());
 app.set('trust proxy', 1);
 app.get('/health', (_req, res) =>
    res.json({ ok: true }),
+);
+app.get(
+   '/reset-password-redirect',
+   resetPasswordRedirect,
 );
 
 // Routes

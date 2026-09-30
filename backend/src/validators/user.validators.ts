@@ -45,3 +45,9 @@ export const deleteAccountSchema =
          },
       ),
    });
+
+export const pushTokenSchema = z.object(
+   {
+      push_token: z.string().min(1),
+   },
+);

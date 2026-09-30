@@ -10,13 +10,7 @@
  */
 
 import axios, { InternalAxiosRequestConfig } from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  getAccessToken,
-  setAccessToken,
-  refreshTokens,
-  clearSession,
-} from "./auth";
+import { getAccessToken, refreshTokens, clearSession } from "./auth";
 
 // ─── Create Instance ──────────────────────────────────────────────────────────
 const api = axios.create({

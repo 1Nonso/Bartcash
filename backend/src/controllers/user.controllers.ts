@@ -11,6 +11,7 @@ import {
    uploadToR2,
    deleteFromR2,
 } from '../utils/storage.utils';
+import { pushTokenSchema } from '../validators/user.validators';
 
 export async function getProfile(
    req: Request,
@@ -153,5 +154,44 @@ export async function deleteAccount(
          success: true,
          message:
             'Account deleted successfully.',
+      });
+}
+
+export async function updatePushToken(
+   req: Request,
+   res: Response,
+) {
+   const parsed =
+      pushTokenSchema.safeParse(
+         req.body,
+      );
+   if (!parsed.success) {
+      return res
+         .status(
+            StatusCodes.BAD_REQUEST,
+         )
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.BAD_REQUEST,
+            errors:
+               parsed.error.flatten()
+                  .fieldErrors,
+         });
+   }
+   await db.user.update({
+      where: {
+         id: req.userId as string,
+      },
+      data: {
+         pushToken:
+            parsed.data.push_token,
+      },
+   });
+   return res
+      .status(StatusCodes.OK)
+      .json({
+         success: true,
+         message: 'Push token saved.',
       });
 }

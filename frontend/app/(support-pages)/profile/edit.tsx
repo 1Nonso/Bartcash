@@ -46,14 +46,14 @@ import api from "@/config/api";
 
 interface UserProfile {
   id: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  profile_photo: string | null;
+  profilePhoto: string | null;
   bio: string | null;
   location: string | null;
-  average_rating: string;
-  total_trades: number;
+  averageRating: string;
+  totalTrades: number;
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -115,11 +115,11 @@ export default function EditProfileScreen() {
       const response = await api.get("/user/profile");
       const user: UserProfile = response.data.data.user;
       setProfile(user);
-      setFirstName(user.first_name);
-      setLastName(user.last_name);
+      setFirstName(user.firstName);
+      setLastName(user.lastName);
       setBio(user.bio ?? "");
       setLocation(user.location ?? "");
-      setAvatarUri(user.profile_photo);
+      setAvatarUri(user.profilePhoto);
     } catch (err: any) {
       Alert.alert("Error", "Failed to load profile. Please try again.");
     } finally {
@@ -244,8 +244,8 @@ export default function EditProfileScreen() {
   const handleBack = useCallback(() => {
     const hasChanges =
       avatarChanged ||
-      firstName !== (profile?.first_name ?? "") ||
-      lastName !== (profile?.last_name ?? "") ||
+      firstName !== (profile?.firstName ?? "") ||
+      lastName !== (profile?.lastName ?? "") ||
       bio !== (profile?.bio ?? "") ||
       location !== (profile?.location ?? "");
 
@@ -262,7 +262,7 @@ export default function EditProfileScreen() {
   // ── Derived ──────────────────────────────────────────────────────────────────
 
   const initials = profile
-    ? `${profile.first_name[0] ?? ""}${profile.last_name[0] ?? ""}`.toUpperCase()
+    ? `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase()
     : "?";
 
   const isValid = firstName.trim().length > 0 && lastName.trim().length > 0;

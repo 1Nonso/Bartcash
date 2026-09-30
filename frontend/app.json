@@ -28,10 +28,23 @@
           "resizeMode": "contain"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       "expo-image",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "825accac-471a-4131-a23e-d4eedff3b8b9"
+      }
+    }
   }
 }

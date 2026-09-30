@@ -44,25 +44,12 @@ import { Trade, completeTrade, getTradeById } from "@/config/trades";
 
 const USER_KEY = "bartcash_user";
 
-function formatValueRange(
-  min: string | null,
-  max: string | null,
-): string | null {
-  if (!min && !max) return null;
-  const fMin = min ? `₦${Number(min).toLocaleString()}` : "";
-  const fMax = max ? `₦${Number(max).toLocaleString()}` : "";
-  if (fMin && fMax) return `${fMin} – ${fMax}`;
-  return fMin || fMax;
-}
-
 interface ItemRowProps {
   title: string;
   image: string | null;
-  valueRange: string | null;
-  condition: string;
 }
 
-function ItemRow({ title, image, valueRange, condition }: ItemRowProps) {
+function ItemRow({ title, image }: ItemRowProps) {
   const theme = useAuthTheme();
   return (
     <View style={[styles.itemRow, { borderColor: theme.borderSubtle }]}>
@@ -86,28 +73,6 @@ function ItemRow({ title, image, valueRange, condition }: ItemRowProps) {
         >
           {title}
         </Text>
-        <View style={styles.itemRowBadges}>
-          <View
-            style={[
-              styles.conditionBadge,
-              { backgroundColor: Colors.gray[100] },
-            ]}
-          >
-            <Text
-              style={[styles.conditionBadgeText, { color: theme.textMuted }]}
-            >
-              {condition.charAt(0).toUpperCase() + condition.slice(1)}
-            </Text>
-          </View>
-          {valueRange && (
-            <View
-              style={[styles.valueBadge, { backgroundColor: Colors.aiSurface }]}
-            >
-              <Ionicons name="trending-up" size={10} color={Colors.ai} />
-              <Text style={styles.valueBadgeText}>{valueRange}</Text>
-            </View>
-          )}
-        </View>
       </View>
     </View>
   );
@@ -232,6 +197,16 @@ export default function TradeCompletionScreen() {
         ? trade.proposer_confirmed
         : trade.receiver_confirmed
       : false;
+
+  const agreedAmount = trade?.current_offer
+    ? trade.trade_type === "cash"
+      ? trade.current_offer.cash_amount
+      : trade.current_offer.top_up_amount
+    : null;
+  const agreedAmountLabel =
+    agreedAmount && Number(agreedAmount) > 0
+      ? `₦${Number(agreedAmount).toLocaleString()}`
+      : null;
 
   if (loading) {
     return (
@@ -457,11 +432,6 @@ export default function TradeCompletionScreen() {
                     key={item.id}
                     title={item.title}
                     image={item.primary_image}
-                    valueRange={formatValueRange(
-                      item.valuation?.value_min ?? null,
-                      item.valuation?.value_max ?? null,
-                    )}
-                    condition={item.condition}
                   />
                 ))}
               </View>
@@ -509,13 +479,28 @@ export default function TradeCompletionScreen() {
                     key={item.id}
                     title={item.title}
                     image={item.primary_image}
-                    valueRange={formatValueRange(
-                      item.valuation?.value_min ?? null,
-                      item.valuation?.value_max ?? null,
-                    )}
-                    condition={item.condition}
                   />
                 ))}
+              </View>
+            )}
+
+            {agreedAmountLabel && (
+              <View
+                style={[
+                  styles.amountRow,
+                  { borderTopColor: theme.borderSubtle },
+                ]}
+              >
+                <Text style={[styles.amountLabel, { color: theme.textMuted }]}>
+                  {trade?.trade_type === "cash"
+                    ? "Agreed cash amount"
+                    : "Agreed top-up"}
+                </Text>
+                <Text
+                  style={[styles.amountValue, { color: theme.textPrimary }]}
+                >
+                  {agreedAmountLabel}
+                </Text>
               </View>
             )}
           </View>
@@ -821,7 +806,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   noticeText: { ...Typography.caption, flex: 1, lineHeight: 18 },
-
+  amountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: Spacing[4],
+    borderTopWidth: 1,
+  },
+  amountLabel: { ...Typography.caption },
+  amountValue: { ...Typography.bodyMedium },
   ctaBar: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing[3],

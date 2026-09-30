@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
 import { login } from "@/config/auth";
+import { registerForPushNotifications } from "@/config/notifications";
 
 export default function SignInScreen() {
   const theme = useAuthTheme();
@@ -98,7 +99,7 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       await login({ email: email.trim(), password });
-
+      registerForPushNotifications();
       // Login successful — tokens stored in auth.ts
       // Navigate directly to main app — no OTP step on login
       router.replace("/(main-pages)/dashboard");

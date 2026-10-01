@@ -75,7 +75,7 @@ export interface Trade {
   awaiting_response_from: string | null;
   recent_messages: TradeMessage[];
   dispute: TradeDispute | null;
-  ratings?: any[];
+  ratings?: TradeRating[];
 }
 
 export interface TradeListItem {
@@ -141,6 +141,15 @@ export interface CompleteResult {
   status: "accepted" | "completed";
   proposer_confirmed: boolean;
   receiver_confirmed: boolean;
+}
+
+export interface TradeRating {
+  id: string;
+  rater_id: string;
+  rated_id: string;
+  score: number;
+  review: string | null;
+  created_at: string;
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────

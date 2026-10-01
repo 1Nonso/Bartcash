@@ -222,7 +222,7 @@ export default function ReviewListingScreen() {
       valuation?.status === "completed" &&
       valuation.value_min &&
       valuation.value_max
-        ? `₦${Number(valuation.value_min).toLocaleString()} – ₦${Number(valuation.value_max).toLocaleString()}`
+        ? `$${Number(valuation.value_min).toLocaleString()} – $${Number(valuation.value_max).toLocaleString()}`
         : null;
 
     return (
@@ -231,7 +231,7 @@ export default function ReviewListingScreen() {
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>AI Estimated Value</Text>
+          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
         </View>
 
         {valuation?.status === "pending" && (
@@ -323,8 +323,8 @@ export default function ReviewListingScreen() {
             { borderTopColor: theme.borderSubtle },
           ]}
         />
-        <Text style={[styles.overrideLabelText, { color: theme.textPrimary }]}>
-          Your Declared Value
+        <Text style={[styles.overrideLabelText, { color: Colors.ai }]}>
+          Please declare a Value for your good below
         </Text>
         <Text
           style={[
@@ -332,7 +332,7 @@ export default function ReviewListingScreen() {
             { color: theme.textMuted, marginBottom: Spacing[2] },
           ]}
         >
-          Optional — what you think it's worth
+          Compulsory — what you think it's worth
         </Text>
         <TextInput
           style={[
@@ -343,7 +343,7 @@ export default function ReviewListingScreen() {
               color: theme.textPrimary,
             },
           ]}
-          placeholder="Enter your value (₦)"
+          placeholder="Enter your value ($)"
           placeholderTextColor={theme.textPlaceholder}
           value={declaredValue}
           onChangeText={setDeclaredValue}
@@ -724,6 +724,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing[2],
+    borderWidth: 0.5,
+    borderColor: Colors.white,
   },
   publishBtnText: { ...Typography.button, color: Colors.white },
 });

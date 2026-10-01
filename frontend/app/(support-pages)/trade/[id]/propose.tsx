@@ -35,6 +35,7 @@ import {
   getMyItems,
 } from "@/config/items";
 import { createTrade } from "@/config/trades";
+import { showToast } from "@/hooks/toast";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,9 @@ export default function ProposeTradeScreen() {
   const [receiverItem, setReceiverItem] = useState<ItemDetail | null>(null);
   const [myItems, setMyItems] = useState<ItemDetail[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [tradeType, setTradeType] = useState<"cash" | "item" | null>(null);
+  const [cashAmount, setCashAmount] = useState("");
+  const [topUpAmount, setTopUpAmount] = useState("");
   const [message, setMessage] = useState("");
   const [messageFocused, setMessageFocused] = useState(false);
 
@@ -218,16 +222,24 @@ export default function ProposeTradeScreen() {
   // ── Submit ───────────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async () => {
-    if (!receiverItem || selectedItemIds.length === 0) return;
+    if (!receiverItem || !tradeType) return;
+    if (tradeType === "cash" && !cashAmount) return;
+    if (tradeType === "item" && selectedItemIds.length === 0) return;
     setSubmitting(true);
     try {
       const trade = await createTrade({
         receiver_id: receiverItem.owner.id,
         receiver_item_id: receiverItem.id,
-        trade_type: "item",
-        offered_item_ids: selectedItemIds,
+        trade_type: tradeType,
+        ...(tradeType === "cash"
+          ? { cash_amount: Number(cashAmount) }
+          : {
+              offered_item_ids: selectedItemIds,
+              top_up_amount: topUpAmount ? Number(topUpAmount) : undefined,
+            }),
         message: message.trim() || undefined,
       });
+      showToast("success", "Proposal sent!");
       router.replace({
         pathname: "/(support-pages)/trade/[id]",
         params: { id: trade.id },
@@ -250,12 +262,18 @@ export default function ProposeTradeScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [receiverItem, selectedItemIds, message]);
-
+  }, [
+    receiverItem,
+    tradeType,
+    cashAmount,
+    selectedItemIds,
+    topUpAmount,
+    message,
+  ]);
   // ── Back guard ───────────────────────────────────────────────────────────────
 
   const handleBack = useCallback(() => {
-    if (selectedItemIds.length > 0 || message.trim()) {
+    if (selectedItemIds.length > 0 || cashAmount || message.trim()) {
       Alert.alert("Discard proposal?", "Your trade proposal will be lost.", [
         { text: "Keep Editing", style: "cancel" },
         { text: "Discard", style: "destructive", onPress: () => goBack() },
@@ -263,7 +281,7 @@ export default function ProposeTradeScreen() {
     } else {
       goBack();
     }
-  }, [selectedItemIds, message]);
+  }, [selectedItemIds, cashAmount, message]);
 
   // ── Match score (simple value comparison) ────────────────────────────────────
 
@@ -304,6 +322,17 @@ export default function ProposeTradeScreen() {
 
   const score = matchScore();
   const isFairTrade = score !== null && score >= 70;
+
+  const selectTradeType = useCallback((type: "cash" | "item") => {
+    setTradeType(type);
+    // Spec: switching modes clears the opposing mode's fields
+    if (type === "cash") {
+      setSelectedItemIds([]);
+      setTopUpAmount("");
+    } else {
+      setCashAmount("");
+    }
+  }, []);
 
   // ── Loading ──────────────────────────────────────────────────────────────────
 
@@ -417,6 +446,120 @@ export default function ProposeTradeScreen() {
             </View>
           )}
 
+          {/* ── Trade Type Selector ── */}
+          <View style={styles.typeSelectorRow}>
+            <TouchableOpacity
+              style={[
+                styles.typeSelectorBtn,
+                {
+                  backgroundColor:
+                    tradeType === "cash" ? Colors.primary : theme.surface,
+                  borderColor:
+                    tradeType === "cash" ? Colors.primary : theme.cardBorder,
+                },
+              ]}
+              onPress={() => selectTradeType("cash")}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="cash-outline"
+                size={16}
+                color={tradeType === "cash" ? Colors.white : theme.textPrimary}
+              />
+              <Text
+                style={[
+                  styles.typeSelectorText,
+                  {
+                    color:
+                      tradeType === "cash" ? Colors.white : theme.textPrimary,
+                  },
+                ]}
+              >
+                Pay with Cash
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeSelectorBtn,
+                {
+                  backgroundColor:
+                    tradeType === "item" ? Colors.primary : theme.surface,
+                  borderColor:
+                    tradeType === "item" ? Colors.primary : theme.cardBorder,
+                },
+              ]}
+              onPress={() => selectTradeType("item")}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="swap-horizontal-outline"
+                size={16}
+                color={tradeType === "item" ? Colors.white : theme.textPrimary}
+              />
+              <Text
+                style={[
+                  styles.typeSelectorText,
+                  {
+                    color:
+                      tradeType === "item" ? Colors.white : theme.textPrimary,
+                  },
+                ]}
+              >
+                Trade an Item
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {tradeType === "cash" && (
+            <View
+              style={[
+                styles.offerSection,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.cardBorder,
+                },
+              ]}
+            >
+              {receiverValuation && (
+                <Text
+                  style={[styles.offerSubtitle, { color: theme.textMuted }]}
+                >
+                  Estimated value: {receiverValuation}
+                </Text>
+              )}
+              <Text style={[styles.messageLabel, { color: theme.textPrimary }]}>
+                Your cash offer
+              </Text>
+              <View
+                style={[
+                  styles.cashInputRow,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.borderDefault,
+                  },
+                ]}
+              >
+                <Text style={styles.cashPrefix}>$</Text>
+                <TextInput
+                  style={[styles.cashInput, { color: Colors.success }]}
+                  placeholder="0"
+                  placeholderTextColor={theme.textPlaceholder}
+                  value={cashAmount}
+                  onChangeText={(v) => setCashAmount(v.replace(/[^0-9]/g, ""))}
+                  keyboardType="numeric"
+                />
+              </View>
+              <Text
+                style={[
+                  styles.charCount,
+                  { color: theme.textMuted, textAlign: "left" },
+                ]}
+              >
+                You can offer more or less — the receiver can negotiate
+              </Text>
+            </View>
+          )}
+
           {/* Images strip */}
           <ScrollView
             horizontal
@@ -453,90 +596,125 @@ export default function ProposeTradeScreen() {
         </View>
 
         {/* Swap icon */}
-        <View style={styles.swapRow}>
-          <View
-            style={[
-              styles.swapDivider,
-              { backgroundColor: theme.borderSubtle },
-            ]}
-          />
-          <View
-            style={[
-              styles.swapIcon,
-              {
-                backgroundColor: theme.surface,
-                borderColor: theme.borderDefault,
-              },
-            ]}
-          >
-            <Ionicons
-              name="swap-vertical"
-              size={18}
-              color={theme.textPrimary}
+        {tradeType === "item" && (
+          <View style={styles.swapRow}>
+            <View
+              style={[
+                styles.swapDivider,
+                { backgroundColor: theme.borderSubtle },
+              ]}
+            />
+            <View
+              style={[
+                styles.swapIcon,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.borderDefault,
+                },
+              ]}
+            >
+              <Ionicons
+                name="swap-vertical"
+                size={18}
+                color={theme.textPrimary}
+              />
+            </View>
+            <View
+              style={[
+                styles.swapDivider,
+                { backgroundColor: theme.borderSubtle },
+              ]}
             />
           </View>
-          <View
-            style={[
-              styles.swapDivider,
-              { backgroundColor: theme.borderSubtle },
-            ]}
-          />
-        </View>
+        )}
 
         {/* ── YOU OFFER section ── */}
-        <View
-          style={[
-            styles.offerSection,
-            { backgroundColor: theme.surface, borderColor: theme.cardBorder },
-          ]}
-        >
-          <Text style={[styles.offerLabel, { color: theme.textMuted }]}>
-            YOU OFFER
-          </Text>
-          <Text style={[styles.offerSubtitle, { color: theme.textPrimary }]}>
-            Select one or more of your listings to offer
-          </Text>
+        {tradeType === "item" && (
+          <View
+            style={[
+              styles.offerSection,
+              { backgroundColor: theme.surface, borderColor: theme.cardBorder },
+            ]}
+          >
+            <Text style={[styles.offerLabel, { color: theme.textMuted }]}>
+              YOU OFFER
+            </Text>
+            <Text style={[styles.offerSubtitle, { color: theme.textPrimary }]}>
+              Select one or more of your listings to offer
+            </Text>
 
-          {loadingMyItems ? (
-            <View style={styles.loadingItems}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={[styles.loadingText, { color: theme.textMuted }]}>
-                Loading your listings...
-              </Text>
-            </View>
-          ) : myItems.length === 0 ? (
-            <View style={styles.noItemsState}>
-              <Ionicons
-                name="cube-outline"
-                size={32}
-                color={Colors.gray[300]}
-              />
-              <Text style={[styles.noItemsText, { color: theme.textMuted }]}>
-                You have no available listings to offer.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.createListingBtn,
-                  { backgroundColor: Colors.primary },
-                ]}
-                onPress={() => router.push("/(support-pages)/listing/create")}
-              >
-                <Text style={styles.createListingBtnText}>
-                  Create a Listing
+            {loadingMyItems ? (
+              <View style={styles.loadingItems}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={[styles.loadingText, { color: theme.textMuted }]}>
+                  Loading your listings...
                 </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            myItems.map((item) => (
-              <SelectableCard
-                key={item.id}
-                item={item}
-                selected={selectedItemIds.includes(item.id)}
-                onToggle={() => toggleItem(item.id)}
-              />
-            ))
-          )}
-        </View>
+              </View>
+            ) : myItems.length === 0 ? (
+              <View style={styles.noItemsState}>
+                <Ionicons
+                  name="cube-outline"
+                  size={32}
+                  color={Colors.gray[300]}
+                />
+                <Text style={[styles.noItemsText, { color: theme.textMuted }]}>
+                  You have no available listings to offer.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.createListingBtn,
+                    { backgroundColor: Colors.primary },
+                  ]}
+                  onPress={() => router.push("/(support-pages)/listing/create")}
+                >
+                  <Text style={styles.createListingBtnText}>
+                    Create a Listing
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              myItems.map((item) => (
+                <SelectableCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedItemIds.includes(item.id)}
+                  onToggle={() => toggleItem(item.id)}
+                />
+              ))
+            )}
+
+            {selectedItemIds.length > 0 && (
+              <View style={{ marginTop: Spacing[3] }}>
+                <Text
+                  style={[styles.messageLabel, { color: theme.textPrimary }]}
+                >
+                  Add cash to balance the trade (optional)
+                </Text>
+                <View
+                  style={[
+                    styles.cashInputRow,
+                    {
+                      backgroundColor: theme.inputBg,
+                      borderColor: theme.borderDefault,
+                    },
+                  ]}
+                >
+                  <Text style={styles.cashPrefix}>₦</Text>
+                  <TextInput
+                    style={[styles.cashInput, { color: Colors.success }]}
+                    placeholder="0"
+                    placeholderTextColor={theme.textPlaceholder}
+                    value={topUpAmount}
+                    onChangeText={(v) =>
+                      setTopUpAmount(v.replace(/[^0-9]/g, ""))
+                    }
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* ── Message (optional) ── */}
         <View
@@ -699,13 +877,20 @@ export default function ProposeTradeScreen() {
             styles.ctaBtn,
             {
               backgroundColor:
-                selectedItemIds.length > 0 && !submitting
+                ((tradeType === "cash" && !!cashAmount) ||
+                  (tradeType === "item" && selectedItemIds.length > 0)) &&
+                !submitting
                   ? Colors.primary
                   : theme.btnDisabled,
             },
           ]}
           onPress={handleSubmit}
-          disabled={selectedItemIds.length === 0 || submitting}
+          disabled={
+            !(
+              (tradeType === "cash" && !!cashAmount) ||
+              (tradeType === "item" && selectedItemIds.length > 0)
+            ) || submitting
+          }
           activeOpacity={0.9}
         >
           {submitting ? (
@@ -904,6 +1089,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing[2],
+    borderWidth: 1,
+    borderColor: Colors.white,
   },
   ctaBtnText: { ...Typography.button, color: Colors.white },
+  typeSelectorRow: { flexDirection: "row", gap: Spacing[3] },
+  typeSelectorBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    paddingVertical: Spacing[3],
+    borderRadius: Radius.lg,
+    borderWidth: Layout.borderWidth,
+  },
+  typeSelectorText: { ...Typography.captionMedium },
+  cashInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing[2],
+    borderRadius: Radius.lg,
+    borderWidth: Layout.borderWidth,
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[1],
+  },
+  cashPrefix: { fontSize: 24, fontWeight: "700", color: Colors.success },
+  cashInput: {
+    flex: 1,
+    fontSize: 24,
+    fontWeight: "700",
+    paddingTop: Spacing[1],
+  },
 });

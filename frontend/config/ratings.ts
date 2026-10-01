@@ -38,6 +38,12 @@ export interface UserRatingsResponse {
   next_cursor: string | null;
 }
 
+export interface SubmitRatingResult {
+  id: string;
+  score: number;
+  review: string | null;
+}
+
 // ─── API Functions ────────────────────────────────────────────────────────────
 
 /**
@@ -46,7 +52,7 @@ export interface UserRatingsResponse {
  */
 export async function submitRating(
   payload: SubmitRatingPayload,
-): Promise<Rating> {
+): Promise<SubmitRatingResult> {
   const response = await api.post("/ratings", payload);
   return response.data.data.rating;
 }

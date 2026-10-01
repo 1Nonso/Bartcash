@@ -41,6 +41,7 @@ import {
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Trade, completeTrade, getTradeById } from "@/config/trades";
+import { showToast } from "@/hooks/toast";
 
 const USER_KEY = "bartcash_user";
 
@@ -147,12 +148,17 @@ export default function TradeCompletionScreen() {
     try {
       const updated = await completeTrade(id);
       if (updated.status === "completed") {
+        showToast("success", "Trade completed!");
         router.replace({
           pathname: "/(support-pages)/trade/[id]/rate",
           params: { id },
         });
       } else {
         // One party confirmed — go back to Trade Detail
+        showToast(
+          "success",
+          "Confirmed! Waiting for the other party to confirm.",
+        );
         goBack();
       }
     } catch (err: any) {

@@ -21,6 +21,7 @@ import { Colors, Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Trade, getTradeById } from "@/config/trades";
 import api from "@/config/api";
+import { showToast } from "@/hooks/toast";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ export default function RaiseDisputeScreen() {
         trade_id: tradeId,
         reason: reason.trim(),
       });
+      showToast("success", "Dispute raised. Both parties have been notified.");
       router.replace({
         pathname: "/(support-pages)/dispute/[id]",
         params: { id: dispute.id },
@@ -168,8 +170,6 @@ export default function RaiseDisputeScreen() {
   }
 
   if (!trade) return null;
-
-  const otherParty = trade.proposer; // Will be refined by current user check in detail screen
 
   // ── Render ───────────────────────────────────────────────────────────────────
 

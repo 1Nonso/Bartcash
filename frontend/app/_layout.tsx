@@ -10,6 +10,8 @@ import { View, ActivityIndicator } from "react-native";
 import "react-native-reanimated";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
+import Toast from "react-native-toast-message";
+import { isExpo } from "@/config/notifications";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { hasSession, refreshTokens } from "@/config/auth";
 import { registerForPushNotifications } from "@/config/notifications";
@@ -63,7 +65,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || isExpo) return;
     if (authed) {
       router.replace("/(main-pages)/dashboard");
       registerForPushNotifications();
@@ -74,6 +76,7 @@ export default function RootLayout() {
 
   // Tap on a notification while app is backgrounded/foregrounded
   useEffect(() => {
+    if (isExpo) return;
     const sub = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         navigateFromNotification(response.notification.request.content.data);
@@ -115,6 +118,7 @@ export default function RootLayout() {
         <Stack.Screen name="(support-pages)" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
+      <Toast />
     </ThemeProvider>
   );
 }

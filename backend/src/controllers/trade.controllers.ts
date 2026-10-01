@@ -1738,7 +1738,21 @@ export async function show(
                              .reason,
                     }
                   : null,
-               ratings: trade.ratings,
+               ratings:
+                  trade.ratings.map(
+                     (r) => ({
+                        id: r.id,
+                        rater_id:
+                           r.raterId,
+                        rated_id:
+                           r.ratedId,
+                        score: r.score,
+                        review:
+                           r.review,
+                        created_at:
+                           r.createdAt,
+                     }),
+                  ),
             },
          },
       });

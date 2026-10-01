@@ -45,6 +45,8 @@ import {
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Trade, getTradeById } from "@/config/trades";
 import { submitRating } from "@/config/ratings";
+import { getStoredUser } from "@/config/auth";
+import { showToast } from "@/hooks/toast";
 
 // ─── Star Rating Component ────────────────────────────────────────────────────
 
@@ -107,6 +109,7 @@ export default function RatingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [trade, setTrade] = useState<Trade | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +164,9 @@ export default function RatingScreen() {
         friction: 10,
       }),
     ]).start();
-
+    getStoredUser().then((user) => {
+      if (user) setCurrentUserId(user.id);
+    });
     loadData();
   }, []);
 
@@ -169,14 +174,6 @@ export default function RatingScreen() {
     try {
       const tradeData = await getTradeById(id!);
       setTrade(tradeData);
-
-      // Check if current user has already rated this trade
-      // ratings array from trade detail contains submitted ratings
-      if (tradeData.ratings && tradeData.ratings.length > 0) {
-        // We'll detect already-rated state via 409 on submit
-        // For now just load the trade data
-      }
-
       setError(null);
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to load trade details.");
@@ -219,7 +216,7 @@ export default function RatingScreen() {
         score,
         review: review.trim() || undefined,
       });
-      // Navigate back to Trade Detail
+      showToast("success", "Rating submitted!");
       goBack();
     } catch (err: any) {
       const status = err.response?.status;
@@ -243,6 +240,17 @@ export default function RatingScreen() {
     goBack();
   }, []);
 
+  useEffect(() => {
+    if (!trade || !currentUserId) return;
+    const mine = trade.ratings?.find((r) => r.rater_id === currentUserId);
+    if (mine) {
+      setAlreadyRated(true);
+      setExistingRating({ score: mine.score, review: mine.review });
+      setScore(mine.score);
+      setReview(mine.review ?? "");
+    }
+  }, [trade, currentUserId]);
+
   // ── Derived ──────────────────────────────────────────────────────────────────
 
   // We need currentUserId to determine other party, but we'll just use trade data
@@ -250,8 +258,10 @@ export default function RatingScreen() {
   // Since this screen is reached after completing a trade, the "other party"
   // is whoever the user was trading with
   const otherParty =
-    trade?.proposer && trade?.receiver
-      ? trade.proposer // We'll show the trade partner — Trade Detail passes context via nav
+    trade && currentUserId
+      ? trade.proposer.id === currentUserId
+        ? trade.receiver
+        : trade.proposer
       : null;
 
   // ── Loading ───────────────────────────────────────────────────────────────────
@@ -411,7 +421,7 @@ export default function RatingScreen() {
               ]}
             >
               <Text style={styles.heroAvatarFallbackText}>
-                {trade?.receiver?.first_name?.charAt(0)?.toUpperCase() ?? "?"}
+                {otherParty?.first_name?.charAt(0)?.toUpperCase() ?? "?"}
               </Text>
             </View>
           )}

@@ -645,7 +645,10 @@ export default function CreateListingScreen() {
           >
             {/* Description */}
             <Text style={[styles.fieldLabel, { color: theme.textPrimary }]}>
-              Description <Text style={{ color: Colors.danger }}>*</Text>
+              Description{" "}
+              <Text style={{ color: Colors.danger }}>
+                * ( must be minimum of 20 Characters )
+              </Text>
             </Text>
             <TextInput
               style={[
@@ -821,7 +824,9 @@ export default function CreateListingScreen() {
             <ActivityIndicator color={Colors.white} />
           ) : (
             <>
-              <Text style={styles.ctaBtnText}>Continue to AI Evaluation</Text>
+              <Text style={styles.ctaBtnText}>
+                Continue to Automated Evaluation
+              </Text>
               <Ionicons name="sparkles" size={16} color={Colors.white} />
             </>
           )}
@@ -1037,6 +1042,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing[2],
+    borderWidth: 1,
+    borderColor: Colors.white,
   },
   ctaBtnText: { ...Typography.button, color: Colors.white },
 });

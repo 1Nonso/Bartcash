@@ -35,6 +35,8 @@ import {
 } from "@/config/items";
 import { getStoredUser } from "@/config/auth";
 
+type ConfidenceLevel = "high" | "medium" | "low";
+
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_WIDTH * 0.72;
 const POLL_INTERVAL = 5000;
@@ -60,10 +62,25 @@ function formatValuationRange(v: ItemValuationDetail | null): string | null {
   return min || max;
 }
 
-function formatConfidence(confidence: string | null): number {
-  if (!confidence) return 0;
-  const num = parseFloat(confidence);
-  return isNaN(num) ? 0 : Math.min(Math.max(num, 0), 100);
+function normalizeConfidence(
+  confidence: string | null,
+): ConfidenceLevel | null {
+  const lower = confidence?.toLowerCase();
+  if (lower === "high" || lower === "medium" || lower === "low") return lower;
+  return null;
+}
+
+function confidenceFillPercent(level: ConfidenceLevel | null): number {
+  switch (level) {
+    case "high":
+      return 90;
+    case "medium":
+      return 60;
+    case "low":
+      return 30;
+    default:
+      return 0;
+  }
 }
 
 function timeAgo(dateStr: string): string {
@@ -98,7 +115,8 @@ interface ValuationCardProps {
 function ValuationCard({ valuation }: ValuationCardProps) {
   const theme = useAuthTheme();
   const range = formatValuationRange(valuation);
-  const confidence = formatConfidence(valuation?.confidence ?? null);
+  const confidenceLevel = normalizeConfidence(valuation?.confidence ?? null);
+  const confidenceFill = confidenceFillPercent(confidenceLevel);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   const isOverride =
@@ -107,7 +125,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   useEffect(() => {
     if (valuation?.status === "completed" && !isOverride) {
       Animated.timing(progressAnim, {
-        toValue: confidence / 100,
+        toValue: confidenceFill / 100,
         duration: 800,
         useNativeDriver: false,
       }).start();
@@ -121,7 +139,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>AI Estimated Value</Text>
+          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
           {valuation?.failed_reason
@@ -139,7 +157,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>AI Estimated Value</Text>
+          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
         </View>
         <View style={styles.valuationPending}>
           <ActivityIndicator size="small" color={Colors.ai} />
@@ -186,7 +204,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
     <View style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}>
       <View style={styles.valuationHeader}>
         <Ionicons name="sparkles" size={16} color={Colors.ai} />
-        <Text style={styles.valuationTitle}>AI Estimated Value</Text>
+        <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
       </View>
       <Text style={styles.valuationRange}>{range}</Text>
       <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
@@ -196,7 +214,11 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         <Text style={[styles.confidenceLabel, { color: theme.textMuted }]}>
           Confidence level
         </Text>
-        <Text style={styles.confidenceValue}>{confidence.toFixed(0)}%</Text>
+        <Text style={styles.confidenceValue}>
+          {confidenceLevel
+            ? confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1)
+            : "—"}
+        </Text>
       </View>
       <View style={[styles.progressTrack, { backgroundColor: Colors.aiLight }]}>
         <Animated.View
@@ -221,11 +243,11 @@ function ValuationCard({ valuation }: ValuationCardProps) {
           color={Colors.ai}
         />
         <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
-          {confidence >= 80
+          {confidenceLevel === "high"
             ? "High Confidence — AI is very certain about this value"
-            : confidence >= 50
+            : confidenceLevel === "medium"
               ? "Medium Confidence — estimate may vary"
-              : "Low Confidence — limited data available"}
+              : "Low Confidence — limited data available"}{" "}
         </Text>
       </View>
     </View>
@@ -389,10 +411,6 @@ export default function ListingDetailScreen() {
       params: { id: item.id },
     });
   }, [item]);
-
-  const handleChat = useCallback(() => {
-    handleProposeTrade();
-  }, [handleProposeTrade]);
 
   const handleEditListing = useCallback(() => {
     if (!item) return;
@@ -615,6 +633,26 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
+          <View
+            style={[styles.section, { borderTopColor: theme.borderSubtle }]}
+          >
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name="pricetags-sharp"
+                size={16}
+                color={theme.textPrimary}
+              />
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                Seller Price / Value
+              </Text>
+            </View>
+            <Text style={[styles.sectionBody, { color: theme.textMuted }]}>
+              {item.user_declared_value === null
+                ? "Seller did not declare a price"
+                : `$${item.user_declared_value}`}
+            </Text>
+          </View>
+
           {item.desired_trade && (
             <View
               style={[styles.section, { borderTopColor: theme.borderSubtle }]}
@@ -722,59 +760,25 @@ export default function ListingDetailScreen() {
             <Ionicons name="create-outline" size={18} color={Colors.white} />
             <Text style={styles.ctaPrimaryText}>Edit Listing</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={styles.ctaRow}>
-            <TouchableOpacity
-              style={[
-                styles.ctaSecondary,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: canProposeTrade
-                    ? theme.borderFocus
-                    : theme.borderDefault,
-                  opacity: canProposeTrade ? 1 : 0.5,
-                },
-              ]}
-              onPress={handleProposeTrade}
-              disabled={!canProposeTrade}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name="sparkles-outline"
-                size={16}
-                color={canProposeTrade ? theme.textPrimary : theme.textMuted}
-              />
-              <Text
-                style={[
-                  styles.ctaSecondaryText,
-                  {
-                    color: canProposeTrade
-                      ? theme.textPrimary
-                      : theme.textMuted,
-                  },
-                ]}
-              >
-                {item.status === "in_trade"
-                  ? "In a Trade"
-                  : item.status === "traded"
-                    ? "Already Traded"
-                    : "Make Offer"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.ctaPrimary, { backgroundColor: Colors.primary }]}
-              onPress={handleChat}
-              activeOpacity={0.9}
-            >
-              <Ionicons
-                name="chatbubble-outline"
-                size={16}
-                color={Colors.white}
-              />
-              <Text style={styles.ctaPrimaryText}>Chat</Text>
-            </TouchableOpacity>
-          </View>
+        ) : item.status === "traded" ? null : (
+          <TouchableOpacity
+            style={[
+              styles.ctaPrimary,
+              {
+                backgroundColor: canProposeTrade
+                  ? Colors.primary
+                  : theme.btnDisabled,
+              },
+            ]}
+            onPress={handleProposeTrade}
+            disabled={!canProposeTrade}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="sparkles-outline" size={18} color={Colors.white} />
+            <Text style={styles.ctaPrimaryText}>
+              {item.status === "in_trade" ? "In a Trade" : "Propose Trade"}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -863,7 +867,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing[2],
-    marginBottom: Spacing[3],
   },
   valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
   valuationRange: {
@@ -871,6 +874,7 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontSize: 28,
     marginBottom: Spacing[1],
+    paddingTop: Spacing[3],
   },
   valuationSubtitle: { ...Typography.caption, marginBottom: Spacing[3] },
   valuationUnavailable: { ...Typography.body },
@@ -967,18 +971,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing[3],
     borderTopWidth: 1,
   },
-  ctaRow: { flexDirection: "row", gap: Spacing[3] },
-  ctaSecondary: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing[2],
-    height: Layout.buttonHeight,
-    borderRadius: Radius.lg,
-    borderWidth: Layout.borderWidth,
-  },
-  ctaSecondaryText: { ...Typography.button },
   ctaPrimary: {
     flex: 1,
     flexDirection: "row",
@@ -986,7 +978,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: Spacing[2],
     height: Layout.buttonHeight,
+    borderWidth: 1,
     borderRadius: Radius.lg,
+    borderColor: Colors.white,
   },
   ctaPrimaryText: { ...Typography.button, color: Colors.white },
 

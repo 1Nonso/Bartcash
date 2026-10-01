@@ -2,6 +2,7 @@ import api from "./api";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { ExecutionEnvironment } from "expo-constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,19 +33,24 @@ export interface NotificationsResponse {
   next_cursor: string | null;
 }
 
+export const isExpo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+if (isExpo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
+
 // ─── API Functions ────────────────────────────────────────────────────────────
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
 export async function registerForPushNotifications(): Promise<void> {
+  if (isExpo) return;
   if (!Device.isDevice) return; // simulators/emulators have no push token
 
   const { status: existing } = await Notifications.getPermissionsAsync();

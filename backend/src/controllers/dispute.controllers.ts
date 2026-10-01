@@ -196,8 +196,13 @@ export async function show(
       await db.dispute.findUnique({
          where: { id },
          include: {
-            trade: true,
             raisedByUser: true,
+            trade: {
+               include: {
+                  proposer: true,
+                  receiver: true,
+               },
+            },
          },
       });
    if (!dispute) {
@@ -205,6 +210,7 @@ export async function show(
          .status(StatusCodes.NOT_FOUND)
          .json({
             success: false,
+            code: 'DISPUTE_NOT_FOUND',
             message:
                'Dispute not found.',
          });
@@ -254,6 +260,26 @@ export async function show(
                   status: trade.status,
                   trade_type:
                      trade.tradeType,
+                  proposer: {
+                     id: trade.proposer
+                        .id,
+                     first_name:
+                        trade.proposer
+                           .firstName,
+                     last_name:
+                        trade.proposer
+                           .lastName,
+                  },
+                  receiver: {
+                     id: trade.receiver
+                        .id,
+                     first_name:
+                        trade.receiver
+                           .firstName,
+                     last_name:
+                        trade.receiver
+                           .lastName,
+                  },
                   completion_method:
                      trade.completionMethod,
                   completed_at:

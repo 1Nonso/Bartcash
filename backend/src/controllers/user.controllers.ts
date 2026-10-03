@@ -179,15 +179,14 @@ export async function updatePushToken(
                   .fieldErrors,
          });
    }
-   await db.user.update({
+   await db.user.updateMany({
       where: {
-         id: req.userId as string,
+         pushToken: token,
+         id: { not: req.userId },
       },
-      data: {
-         pushToken:
-            parsed.data.push_token,
-      },
+      data: { pushToken: null },
    });
+
    return res
       .status(StatusCodes.OK)
       .json({

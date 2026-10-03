@@ -13,13 +13,18 @@ import {
    listItemsQuerySchema,
    overrideValuationSchema,
 } from '../validators/item.validators';
-import { uploadToR2 } from '../services/r2.service';
+import {
+   uploadToR2,
+   deleteFromR2,
+} from '../services/r2.service';
 import { enqueueItemValuation } from '../queue/itemValuation.queue';
 import { Prisma } from '../generated/prisma/client';
 import {
    decodeCursor,
    encodeCursor,
 } from '../utils/cursor';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 const IMAGE_LIMIT = 6;
 
@@ -99,6 +104,17 @@ export async function create(
    req: Request,
    res: Response,
 ) {
+   const files =
+      (req.files as
+         | Express.Multer.File[]
+         | undefined) ?? [];
+   if (files.length === 0)
+      return res.status(400).json({
+         success: false,
+         message:
+            'Please upload at least one image.',
+      });
+
    const parsed =
       createItemSchema.safeParse(
          req.body,
@@ -148,42 +164,228 @@ export async function create(
          });
    }
 
-   const item = await db.item.create({
-      data: {
-         title: rest.title,
-         description: rest.description,
-         condition: rest.condition,
-         userId: req.userId as string,
-         categoryId: category_id,
-         desiredTrade:
-            desired_trade ?? null,
-         isService: is_service ?? false,
-         status: 'available',
-         ...(rest.location !== undefined
-            ? {
-                 location:
-                    rest.location,
-              }
-            : {}),
-      },
-   });
-
-   return res
-      .status(StatusCodes.CREATED)
-      .json({
-         success: true,
+   const itemId = randomUUID();
+   const uploaded: {
+      key: string;
+      url: string;
+   }[] = [];
+   try {
+      for (const [i, file] of files
+         .slice(0, IMAGE_LIMIT)
+         .entries()) {
+         const key = `items/${itemId}/${Date.now()}_${i}.${file.originalname.split('.').pop()}`;
+         uploaded.push({
+            key,
+            url: await uploadToR2(
+               key,
+               file.buffer,
+               file.mimetype,
+            ),
+         });
+      }
+      const { item, valuation } =
+         await db.$transaction(
+            async (tx) => {
+               const item =
+                  await tx.item.create({
+                     data: {
+                        id: itemId,
+                        title: rest.title,
+                        description:
+                           rest.description,
+                        condition:
+                           rest.condition,
+                        userId:
+                           req.userId as string,
+                        categoryId:
+                           category_id,
+                        desiredTrade:
+                           desired_trade ??
+                           null,
+                        isService:
+                           is_service ??
+                           false,
+                        status: 'draft',
+                        ...(rest.location !==
+                        undefined
+                           ? {
+                                location:
+                                   rest.location,
+                             }
+                           : {}),
+                        images: {
+                           create:
+                              uploaded.map(
+                                 (
+                                    u,
+                                    i,
+                                 ) => ({
+                                    url: u.url,
+                                    isPrimary:
+                                       i ===
+                                       0,
+                                    displayOrder:
+                                       i,
+                                 }),
+                              ),
+                        },
+                     },
+                  });
+               const valuation =
+                  await tx.itemValuation.create(
+                     {
+                        data: {
+                           itemId,
+                           status:
+                              'pending',
+                           currency:
+                              'USD',
+                        },
+                     },
+                  );
+               return {
+                  item,
+                  valuation,
+               };
+            },
+         );
+      try {
+         await enqueueItemValuation({
+            itemId,
+            valuationId: valuation.id,
+         });
+      } catch {
+         await db.itemValuation.update({
+            where: { id: valuation.id },
+            data: {
+               status: 'failed',
+               failedReason:
+                  'queue_unavailable',
+            }, // user can hit Retry
+         });
+      }
+      return res
+         .status(StatusCodes.CREATED)
+         .json({
+            success: true,
+            message:
+               'Item listing created.',
+            data: {
+               item: {
+                  id: item.id,
+                  title: item.title,
+                  status: item.status,
+                  valuation_status:
+                     'pending',
+               },
+            },
+         });
+   } catch (err) {
+      await Promise.allSettled(
+         uploaded.map((u) =>
+            deleteFromR2(u.key),
+         ),
+      ); // nothing left behind
+      return res.status(500).json({
+         success: false,
          message:
-            'Item listing created.',
-         data: {
-            item: {
-               id: item.id,
-               title: item.title,
-               status: item.status,
-               valuation_status:
-                  'pending',
+            'Could not create the listing. Please try again.',
+      });
+   }
+}
+
+export async function publish(
+   req: Request,
+   res: Response,
+) {
+   const parsed = z
+      .object({
+         user_declared_value: z
+            .number()
+            .positive(),
+      })
+      .safeParse(req.body);
+   if (!parsed.success)
+      return res.status(400).json({
+         success: false,
+         message:
+            ReasonPhrases.BAD_REQUEST,
+         errors:
+            parsed.error.flatten()
+               .fieldErrors,
+      });
+   const id = req.params.id as string;
+   const item = await db.item.findFirst(
+      {
+         where: { id, deletedAt: null },
+         include: {
+            valuation: true,
+            images: {
+               select: { id: true },
+               take: 1,
             },
          },
+      },
+   );
+   if (!item)
+      return res.status(404).json({
+         success: false,
+         message: 'Item not found.',
       });
+   if (item.userId !== req.userId)
+      return res.status(403).json({
+         success: false,
+         message:
+            'You do not have permission to publish this item.',
+      });
+   if (item.status !== 'draft')
+      return res.status(422).json({
+         success: false,
+         message:
+            'This listing is already published.',
+      });
+   if (item.images.length === 0)
+      return res.status(422).json({
+         success: false,
+         message:
+            'Add at least one image first.',
+      });
+
+   const updated = await db.item.update(
+      {
+         where: { id },
+         data: {
+            status: 'available',
+            userDeclaredValue:
+               parsed.data
+                  .user_declared_value,
+         },
+      },
+   );
+   const warning =
+      checkDeclaredValueOutlier(
+         parsed.data
+            .user_declared_value,
+         item.valuation,
+      );
+   return res.status(200).json({
+      success: true,
+      message: 'Listing published.',
+      data: {
+         item: {
+            id: updated.id,
+            status: updated.status,
+         },
+      },
+      ...(warning
+         ? {
+              warnings: {
+                 user_declared_value:
+                    warning,
+              },
+           }
+         : {}), // soft, never blocks
+   });
 }
 
 // -------------------------------------------------------------------------
@@ -377,6 +579,7 @@ export async function index(
       status: 'available',
       deletedAt: null,
       userId: { not: userId },
+      images: { some: {} },
    };
 
    if (search) {
@@ -424,6 +627,10 @@ export async function index(
          },
       };
    }
+
+   const total = await db.item.count({
+      where,
+   });
 
    if (cursor) {
       const c = decodeCursor(cursor);
@@ -517,7 +724,7 @@ export async function index(
          data: {
             items: formatted,
             next_cursor: nextCursor,
-            total: formatted.length,
+            total,
          },
       });
 }

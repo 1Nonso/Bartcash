@@ -19,7 +19,8 @@ export const createItemSchema =
          .optional()
          .nullable(),
       is_service: z
-         .boolean()
+         .enum(['true', 'false'])
+         .transform((v) => v === 'true')
          .optional(),
       location: z
          .string()

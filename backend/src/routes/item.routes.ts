@@ -3,14 +3,29 @@ import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import { runUploadMiddleware } from '../middlewares/upload.middleware';
 import * as itemController from '../controllers/item.controllers';
+import multer from 'multer';
 
+const upload = multer({
+   storage: multer.memoryStorage(),
+   limits: {
+      fileSize: 10 * 1024 * 1024,
+   },
+});
 const router = Router();
 
 router.post(
    '/',
    requireAuth,
+   upload.array('images', 6),
    itemController.create,
 );
+
+router.patch(
+   '/:id/publish',
+   requireAuth,
+   itemController.publish,
+);
+
 router.post(
    '/:id/images',
    requireAuth,

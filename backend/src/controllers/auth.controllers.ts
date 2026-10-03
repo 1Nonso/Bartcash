@@ -46,7 +46,11 @@ export async function register(
 
    const existingUser =
       await db.user.findUnique({
-         where: { email: email },
+         where: {
+            email: email
+               .trim()
+               .toLowerCase(),
+         },
       });
 
    if (existingUser) {
@@ -160,7 +164,9 @@ export async function verifyOtp(
    const otpRecord =
       await db.otpCode.findFirst({
          where: {
-            email,
+            email: email
+               .trim()
+               .toLowerCase(),
             expiresAt: {
                gt: new Date(),
             },
@@ -293,7 +299,11 @@ export async function resendOtp(
 
    const user =
       await db.user.findUnique({
-         where: { email: email },
+         where: {
+            email: email
+               .trim()
+               .toLowerCase(),
+         },
       });
 
    if (!user) {
@@ -441,7 +451,11 @@ export async function login(
 
    const user =
       await db.user.findUnique({
-         where: { email: email },
+         where: {
+            email: email
+               .trim()
+               .toLowerCase(),
+         },
       });
 
    const passwordMatches = user
@@ -781,9 +795,15 @@ export async function forgotPassword(
       FORGOT_PASSWORD_WINDOW_SECONDS,
    );
 
+   const normalisedEmail = email
+      .trim()
+      .toLowerCase();
+
    const user =
       await db.user.findUnique({
-         where: { email: email },
+         where: {
+            email: normalisedEmail,
+         },
       });
 
    if (!user) {

@@ -57,8 +57,9 @@ export const listItemsQuerySchema = z
          .number()
          .min(0)
          .optional(),
-      is_service: z.coerce
-         .boolean()
+      is_service: z
+         .enum(['true', 'false'])
+         .transform((v) => v === 'true')
          .optional(),
       cursor: z.string().optional(),
       limit: z.coerce

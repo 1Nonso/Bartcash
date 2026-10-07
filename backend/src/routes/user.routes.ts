@@ -13,6 +13,7 @@ import {
    deleteAccount,
    updatePushToken,
 } from '../controllers/user.controllers';
+import { limiter } from '../libs/rateLimiter';
 
 const router = Router();
 
@@ -55,6 +56,7 @@ router.put(
 router.post(
    '/avatar',
    requireAuth,
+   limiter,
    upload.single('avatar'),
    updateAvatar,
 );

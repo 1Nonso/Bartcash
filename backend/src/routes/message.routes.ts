@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import * as messages from '../controllers/message.controllers';
+import { limiter } from '../libs/rateLimiter';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.get(
 router.post(
    '/:id/messages',
    requireAuth,
+   limiter,
    messages.store,
 );
 router.patch(

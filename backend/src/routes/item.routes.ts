@@ -4,6 +4,7 @@ import { requireAuth } from '../middlewares/auth.middleware';
 import { runUploadMiddleware } from '../middlewares/upload.middleware';
 import * as itemController from '../controllers/item.controllers';
 import multer from 'multer';
+import { limiter } from '../libs/rateLimiter';
 
 const upload = multer({
    storage: multer.memoryStorage(),
@@ -11,11 +12,13 @@ const upload = multer({
       fileSize: 10 * 1024 * 1024,
    },
 });
+
 const router = Router();
 
 router.post(
    '/',
    requireAuth,
+   limiter,
    upload.array('images', 6),
    itemController.create,
 );
@@ -70,6 +73,7 @@ router.get(
 router.post(
    '/:id/valuation/retry',
    requireAuth,
+   limiter,
    itemController.retryValuation,
 );
 router.patch(

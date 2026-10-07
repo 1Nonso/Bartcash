@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import * as comments from '../controllers/comment.controllers';
+import { limiter } from '../libs/rateLimiter';
 
 const router = Router();
 
@@ -10,11 +11,14 @@ router.get(
    '/items/:id/comments',
    comments.index,
 ); // public
+
 router.post(
    '/items/:id/comments',
    requireAuth,
+   limiter,
    comments.store,
 );
+
 router.delete(
    '/comments/:id',
    requireAuth,

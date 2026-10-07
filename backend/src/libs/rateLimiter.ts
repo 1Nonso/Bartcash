@@ -1,4 +1,13 @@
 import { db } from '../config/db.config';
+import {
+   rateLimit,
+   MINUTE,
+} from 'express-rate-limit';
+
+export const limiter = rateLimit({
+   windowMs: 1 * MINUTE,
+   limit: 10,
+});
 
 export async function hit(
    key: string,

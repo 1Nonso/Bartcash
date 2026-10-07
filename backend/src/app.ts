@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieparser from 'cookie-parser';
 import morgan from 'morgan';
+import { rateLimit } from 'express-rate-limit';
 import authRoutes from '../src/routes/auth.routes';
 import userRoutes from '../src/routes/user.routes';
 import categoryRoutes from '../src/routes/categories.routes';
@@ -18,6 +19,13 @@ import { resetPasswordRedirect } from './controllers/auth.controllers';
 
 const app = express();
 
+const limiter = rateLimit({
+   windowMs: 1 * 6 * 1000,
+   limit: 100,
+   message:
+      'Too many request. Try again later',
+});
+
 app.use(morgan('combined'));
 app.use(express.json());
 app.use(
@@ -27,6 +35,7 @@ app.use(
    }),
 );
 app.use(cookieparser());
+app.use(limiter);
 app.set('trust proxy', 1);
 app.get('/health', (_req, res) =>
    res.json({ ok: true }),

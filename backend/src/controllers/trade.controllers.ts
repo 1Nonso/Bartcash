@@ -18,6 +18,9 @@ import {
    decodeCursor,
    encodeCursor,
 } from '../utils/cursor';
+import createHttpError, {
+   HttpError,
+} from 'http-errors';
 
 const ROUND_LIMIT = 3;
 const ROUND_WINDOW_MS =
@@ -313,6 +316,27 @@ export async function create(
                status: 'in_trade',
             },
          });
+
+         const { count } =
+            await tx.item.updateMany({
+               where: {
+                  id: {
+                     in: itemIdsToLock,
+                  },
+                  status: 'available',
+               },
+               data: {
+                  status: 'in_trade',
+               },
+            });
+         if (
+            count !==
+            itemIdsToLock.length
+         )
+            throw createHttpError(
+               422,
+               'One or more items are longer available.',
+            );
 
          await tx.tradeOffer.create({
             data: {

@@ -39,6 +39,7 @@ async function findActiveItem(
       select: {
          id: true,
          userId: true,
+         status: true,
       },
    });
 }
@@ -78,6 +79,22 @@ export async function index(
          .json({
             success: false,
             message: 'Item not found.',
+         });
+   }
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
          });
    }
 
@@ -191,6 +208,22 @@ export async function store(
          .json({
             success: false,
             message: 'Item not found.',
+         });
+   }
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
          });
    }
 

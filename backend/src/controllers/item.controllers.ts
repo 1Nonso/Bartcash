@@ -24,7 +24,7 @@ import {
    encodeCursor,
 } from '../utils/cursor';
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
+import { success, z } from 'zod';
 
 const IMAGE_LIMIT = 6;
 
@@ -891,6 +891,23 @@ export async function show(
          });
    }
 
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
+         });
+   }
+
    return res
       .status(StatusCodes.OK)
       .json({
@@ -1264,6 +1281,23 @@ export async function valuation(
          .json({
             success: false,
             message: 'Item not found.',
+         });
+   }
+
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
          });
    }
 

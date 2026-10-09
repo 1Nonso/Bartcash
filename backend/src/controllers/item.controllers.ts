@@ -1039,6 +1039,12 @@ export async function update(
    const conditionChanged =
       rest.condition !== undefined &&
       rest.condition !== item.condition;
+   const titleChanged =
+      rest.title !== undefined &&
+      rest.title !== item.title;
+   const categoryChanged =
+      category_id !== undefined &&
+      category_id !== item.categoryId;
 
    const data: Record<string, unknown> =
       {};
@@ -1096,7 +1102,9 @@ export async function update(
 
    if (
       descriptionChanged ||
-      conditionChanged
+      conditionChanged ||
+      titleChanged ||
+      categoryChanged
    ) {
       const valuation =
          await db.itemValuation.upsert({

@@ -26,7 +26,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,46 +45,12 @@ import {
   getCategories,
   getMarketplaceItems,
 } from "@/config/items";
+import { formatValuation, conditionLabel, timeAgo } from "@/constants/listing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 type Condition = "new" | "good" | "fair" | "poor";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatValuation(item: MarketplaceItem): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `₦${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `₦${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return `${Math.floor(diff / 2592000)}mo ago`;
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
 interface SearchResultCardProps {
   item: MarketplaceItem;
   onPress: () => void;
@@ -92,7 +58,7 @@ interface SearchResultCardProps {
 
 function SearchResultCard({ item, onPress }: SearchResultCardProps) {
   const theme = useAuthTheme();
-  const val = formatValuation(item);
+  const val = formatValuation(item.valuation);
   const ownerName = `${item.owner.first_name} ${item.owner.last_name}`;
   const ownerInitials =
     `${item.owner.first_name[0] ?? ""}${item.owner.last_name[0] ?? ""}`.toUpperCase();
@@ -310,12 +276,16 @@ export default function SearchScreen() {
       }),
     ]).start();
 
-    // Auto-focus input
-    setTimeout(() => inputRef.current?.focus(), 200);
-
-    // Load categories
     loadCategories();
   }, []);
+
+  // Auto-focus input
+  useFocusEffect(
+    useCallback(() => {
+      const t = setTimeout(() => inputRef.current?.focus(), 200);
+      return () => clearTimeout(t);
+    }, []),
+  );
 
   const loadCategories = async () => {
     try {
@@ -326,6 +296,7 @@ export default function SearchScreen() {
 
   // ── Search logic ─────────────────────────────────────────────────────────────
 
+  const requestId = useRef(0);
   const performSearch = useCallback(
     async (
       q: string,
@@ -333,9 +304,11 @@ export default function SearchScreen() {
       cond: Condition | null,
       cursor?: string,
     ) => {
+      const myId = ++requestId.current;
       if (!q.trim() && !catId && !cond) {
         setResults([]);
         setHasSearched(false);
+        setLoading(false);
         return;
       }
 
@@ -350,7 +323,7 @@ export default function SearchScreen() {
         if (cursor) params.cursor = cursor;
 
         const data = await getMarketplaceItems(params);
-
+        if (myId !== requestId.current) return;
         if (cursor) {
           setResults((prev) => [...prev, ...data.items]);
         } else {
@@ -360,10 +333,14 @@ export default function SearchScreen() {
         setHasSearched(true);
         setError(null);
       } catch (err: any) {
+        if (myId !== requestId.current) return;
         setError("Search failed. Please try again.");
+        setHasSearched(true);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (myId === requestId.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [],
@@ -384,6 +361,9 @@ export default function SearchScreen() {
   // Re-search when filters change
   const handleCategorySelect = useCallback(
     (catId: string | null) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
       setSelectedCategory(catId);
       performSearch(query, catId, selectedCondition);
     },
@@ -392,6 +372,9 @@ export default function SearchScreen() {
 
   const handleConditionSelect = useCallback(
     (cond: Condition | null) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
       setSelectedCondition(cond);
       performSearch(query, selectedCategory, cond);
     },
@@ -399,6 +382,9 @@ export default function SearchScreen() {
   );
 
   const handleClearAll = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
     setQuery("");
     setSelectedCategory(null);
     setSelectedCondition(null);

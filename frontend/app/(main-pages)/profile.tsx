@@ -26,6 +26,7 @@ import {
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { logout, getStoredUser } from "@/config/auth";
 import api from "@/config/api";
+import { formatValuation } from "@/constants/listing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ interface MyListing {
   valuation: {
     value_min: string | null;
     value_max: string | null;
-    status: string;
+    status: "pending" | "completed" | "failed";
   } | null;
 }
 
@@ -103,23 +104,12 @@ function memberSince(dateStr: string): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-function formatValuation(item: MyListing): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
-    return null;
-  return `$${Number(v.value_min).toLocaleString()} – $${Number(v.value_max).toLocaleString()}`;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
+// function formatValuation(item: MyListing): string | null {
+//   const v = item.valuation;
+//   if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
+//     return null;
+//   return `$${Number(v.value_min).toLocaleString()} – $${Number(v.value_max).toLocaleString()}`;
+// }
 // ─── Star rating component ────────────────────────────────────────────────────
 
 function StarRating({ score }: { score: number }) {
@@ -432,7 +422,7 @@ export default function ProfileScreen() {
                 icon: "notifications-outline",
                 label: "Notifications",
                 count: null,
-                // onPress: () => router.push("/(support-pages)/notifications"),
+                onPress: () => router.push("/(support-pages)/notification"),
               },
             ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
@@ -518,7 +508,7 @@ export default function ProfileScreen() {
                 contentContainerStyle={styles.listingsStrip}
               >
                 {listings.map((item) => {
-                  const val = formatValuation(item);
+                  const val = formatValuation(item.valuation);
                   return (
                     <TouchableOpacity
                       key={item.id}

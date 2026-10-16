@@ -99,7 +99,7 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       await login({ email: email.trim(), password });
-      registerForPushNotifications();
+      registerForPushNotifications().catch(() => {});
       // Login successful — tokens stored in auth.ts
       // Navigate directly to main app — no OTP step on login
       router.replace("/(main-pages)/dashboard");

@@ -16,6 +16,12 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { hasSession, refreshTokens } from "@/config/auth";
 import { registerForPushNotifications } from "@/config/notifications";
 import { Colors } from "@/constants";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+// in RootLayout's return
+{
+  /* your existing providers and <Stack /> */
+}
 
 SplashScreen.preventAutoHideAsync();
 
@@ -76,7 +82,7 @@ export default function RootLayout() {
 
   // Tap on a notification while app is backgrounded/foregrounded
   useEffect(() => {
-    if (isExpo) return;
+    if (!isExpo) return;
     const sub = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         navigateFromNotification(response.notification.request.content.data);
@@ -112,13 +118,18 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(main-pages)" options={{ headerShown: false }} />
-        <Stack.Screen name="(support-pages)" options={{ headerShown: false }} />
-      </Stack>
-      <StatusBar style="auto" />
-      <Toast />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(main-pages)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="(support-pages)"
+            options={{ headerShown: false }}
+          />
+        </Stack>
+        <StatusBar style="auto" />
+        <Toast />
+      </GestureHandlerRootView>
     </ThemeProvider>
   );
 }

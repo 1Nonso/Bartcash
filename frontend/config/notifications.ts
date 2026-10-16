@@ -36,7 +36,7 @@ export interface NotificationsResponse {
 export const isExpo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-if (isExpo) {
+if (!isExpo) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -61,12 +61,13 @@ export async function registerForPushNotifications(): Promise<void> {
   }
   if (status !== "granted") return;
 
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  const { data: token } = await Notifications.getExpoPushTokenAsync({
-    projectId,
-  });
-
   try {
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
     await api.patch("/user/push-token", { push_token: token });
   } catch (err) {
     console.error("Failed to register push token:", err);
@@ -85,6 +86,11 @@ export async function getNotifications(
 ): Promise<NotificationsResponse> {
   const response = await api.get("/notifications", { params });
   return response.data.data;
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const res = await api.get("/notifications", { params: { limit: 1 } });
+  return res.data.data.unread_count ?? 0;
 }
 
 /**

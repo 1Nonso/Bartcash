@@ -83,7 +83,7 @@ function confidenceFillPercent(level: ConfidenceLevel | null): number {
   }
 }
 
-function timeAgo(dateStr: string): string {
+export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const days = Math.floor(diff / 86400000);
   if (days === 0) return "Today";

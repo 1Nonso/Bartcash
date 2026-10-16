@@ -26,38 +26,20 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
-import { ItemDetail, deleteItem, getMyItems } from "@/config/items";
+import { ItemDetail, MyItem, deleteItem, getMyItems } from "@/config/items";
+import { formatValuation, conditionLabel } from "@/constants/listing";
 
-type FilterTab = "available" | "inactive" | "traded";
+type FilterTab = "all" | "available" | "in_trade" | "traded" | "inactive";
 
 const FILTER_TABS: { label: string; value: FilterTab }[] = [
+  { label: "All", value: "all" },
   { label: "Available", value: "available" },
   { label: "Inactive", value: "inactive" },
   { label: "Traded", value: "traded" },
+  { label: "In Trade", value: "in_trade" },
 ];
 
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function formatValuation(item: ItemDetail): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `$${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `$${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
 // ─── Listing card ─────────────────────────────────────────────────────────────
-
 interface MyListingCardProps {
   item: ItemDetail;
   onEdit: () => void;
@@ -72,7 +54,7 @@ function MyListingCard({
   onPress,
 }: MyListingCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatValuation(item);
+  const valuation = formatValuation(item.valuation);
 
   return (
     <TouchableOpacity
@@ -307,11 +289,7 @@ export default function MyListingsScreen() {
     } else {
       const q = searchQuery.toLowerCase();
       setFilteredItems(
-        items.filter(
-          (item) =>
-            item.title.toLowerCase().includes(q) ||
-            item.description?.toLowerCase().includes(q),
-        ),
+        items.filter((item) => item.title.toLowerCase().includes(q)),
       );
     }
   }, [searchQuery, items]);
@@ -338,6 +316,7 @@ export default function MyListingsScreen() {
   const handleTabChange = useCallback(
     (tab: FilterTab) => {
       if (tab === activeTab) return;
+      status: tab === "all" ? undefined : tab;
       setActiveTab(tab);
       setSearchQuery("");
       setItems([]);

@@ -51,6 +51,18 @@ export interface GetItemsParams {
   value_max?: number;
 }
 
+export interface MyItem {
+  id: string;
+  title: string;
+  condition: "new" | "good" | "fair" | "poor";
+  status: "all" | "available" | "in_trade" | "traded" | "inactive";
+  is_service: boolean;
+  location: string | null;
+  primary_image: any | null;
+  valuation: ItemValuation | null;
+  created_at: string;
+}
+
 // ─── Image types ──────────────────────────────────────────────────────────────
 
 export interface ItemImage {
@@ -170,14 +182,49 @@ export async function getMyItems(
  * Create a new item listing.
  * POST /items
  */
-export async function createItem(payload: CreateItemPayload): Promise<{
-  id: string;
-  title: string;
-  status: string;
-  valuation_status: string;
-}> {
-  const response = await api.post("/items", payload);
-  return response.data.data.item;
+// export async function createItem(payload: CreateItemPayload): Promise<{
+//   id: string;
+//   title: string;
+//   status: string;
+//   valuation_status: string;
+// }> {
+//   const response = await api.post("/items", payload);
+//   return response.data.data.item;
+// }
+
+export async function createItem(
+  payload: CreateItemPayload,
+  images: { uri: string; name: string; type: string }[],
+) {
+  const form = new FormData();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (v !== undefined) form.append(k, String(v));
+  });
+  images.forEach((img) =>
+    form.append("images", {
+      uri: img.uri,
+      name: img.name,
+      type: img.type,
+    } as any),
+  );
+  const res = await api.post("/items", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 60000,
+  });
+  return res.data.data.item as {
+    id: string;
+    title: string;
+    status: string;
+    valuation_status: string;
+  };
+}
+
+export async function publishItem(id: string, user_declared_value: number) {
+  const res = await api.patch(`/items/${id}/publish`, { user_declared_value });
+  return {
+    item: res.data.data.item,
+    warnings: res.data.warnings as Record<string, string> | undefined,
+  };
 }
 
 /**

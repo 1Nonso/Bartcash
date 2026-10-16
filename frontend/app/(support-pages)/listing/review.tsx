@@ -22,9 +22,10 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
-  updateItem,
   retryItemValuation,
+  publishItem,
 } from "@/config/items";
+import { goBack } from "@/hooks/navigation";
 
 const POLL_INTERVAL = 5000;
 const POLL_TIMEOUT_MS = 60000; // Stop polling after 60s
@@ -39,6 +40,18 @@ function formatCondition(c: string): string {
   return map[c] ?? c;
 }
 
+function declaredValueWarning(
+  declared: number,
+  v: ItemValuationDetail | null,
+): string | null {
+  if (v?.status !== "completed" || !v.value_min || !v.value_max) return null;
+  if (declared < Number(v.value_min) * 0.6)
+    return "Your declared value is significantly below our estimate. You may want to double-check it.";
+  if (declared > Number(v.value_max) * 1.4)
+    return "Your declared value is significantly above our estimate. You may want to double-check it.";
+  return null;
+}
+
 export default function ReviewListingScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
@@ -50,12 +63,19 @@ export default function ReviewListingScreen() {
   const [publishing, setPublishing] = useState(false);
   const [declaredValue, setDeclaredValue] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [timeOut, setTimeOut] = useState(false);
+
+  const [showValueError, setShowValueError] = useState(false);
+  const declaredNum = parseFloat(declaredValue.replace(/,/g, ""));
+  const declaredValid = !isNaN(declaredNum) && declaredNum > 0;
+  const valueWarning = declaredValid
+    ? declaredValueWarning(declaredNum, valuation)
+    : null;
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const contentAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
 
   const CONFIDENCE_LEVELS: Record<
     string,
@@ -78,8 +98,6 @@ export default function ReviewListingScreen() {
 
         if (data.valuation?.status === "pending") {
           startPolling(id);
-        } else if (data.valuation?.status === "completed") {
-          animateProgress(parseFloat(data.valuation.confidence ?? "0"));
         }
       } catch {
         Alert.alert(
@@ -113,9 +131,7 @@ export default function ReviewListingScreen() {
         setValuation(v);
         if (v.status !== "pending") {
           stopPolling();
-          if (v.status === "completed") {
-            animateProgress(parseFloat(v.confidence ?? "0"));
-          }
+          setTimeOut(true);
         }
       } catch {
         stopPolling();
@@ -125,10 +141,6 @@ export default function ReviewListingScreen() {
     // Safety timeout — stop after 60s regardless
     pollTimeoutRef.current = setTimeout(() => {
       stopPolling();
-      // If still pending after timeout, set to failed so the user isn't stuck
-      setValuation((prev) =>
-        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
-      );
     }, POLL_TIMEOUT_MS);
   }, []);
 
@@ -143,37 +155,17 @@ export default function ReviewListingScreen() {
     }
   }, []);
 
-  const animateProgress = (confidence: number) => {
-    Animated.timing(progressAnim, {
-      toValue: Math.min(Math.max(confidence, 0), 100) / 100,
-      duration: 900,
-      useNativeDriver: false,
-    }).start();
-  };
-
   // ── Publish ──────────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
     if (!item) return;
-
-    if (declaredValue) {
-      const val = parseFloat(declaredValue);
-      if (isNaN(val) || val <= 0) {
-        Alert.alert("Invalid Value", "Please enter a valid declared value.");
-        return;
-      }
+    if (!declaredValid) {
+      setShowValueError(true);
+      return;
     }
 
     setPublishing(true);
     try {
-      if (declaredValue) {
-        const { warnings } = await updateItem(item.id, {
-          user_declared_value: parseFloat(declaredValue),
-        });
-        if (warnings?.user_declared_value) {
-          Alert.alert("Heads up", warnings.user_declared_value);
-        }
-      }
-
+      await publishItem(item.id, declaredNum);
       router.replace({
         pathname: "/(support-pages)/listing/[id]",
         params: { id: item.id },
@@ -189,8 +181,9 @@ export default function ReviewListingScreen() {
   }, [item, declaredValue]);
 
   const handleEditDetails = useCallback(() => {
-    router.replace({
-      pathname: "/(support-pages)/listing/create",
+    router.push({
+      pathname: "/(support-pages)/listing/[id]/edit",
+      params: { id: item?.id },
     });
   }, []);
 
@@ -199,7 +192,7 @@ export default function ReviewListingScreen() {
     setRetrying(true);
     try {
       await retryItemValuation(item.id);
-      setValuation((prev) => (prev ? { ...prev, status: "pending" } : prev));
+      setTimeOut(true);
       startPolling(item.id);
     } catch (err: any) {
       Alert.alert(
@@ -213,7 +206,7 @@ export default function ReviewListingScreen() {
 
   // ── Valuation section ────────────────────────────────────────────────────────
 
-  const ValuationSection = () => {
+  const renderValuation = () => {
     const level =
       valuation?.status === "completed" && valuation.confidence
         ? CONFIDENCE_LEVELS[valuation.confidence]
@@ -347,8 +340,26 @@ export default function ReviewListingScreen() {
           placeholderTextColor={theme.textPlaceholder}
           value={declaredValue}
           onChangeText={setDeclaredValue}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
         />
+
+        {valueWarning && (
+          <View style={styles.warnRow}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={14}
+              color={Colors.warning}
+            />
+            <Text style={[styles.warnText, { color: Colors.warning }]}>
+              {valueWarning}
+            </Text>
+          </View>
+        )}
+        {showValueError && !declaredValid && (
+          <Text style={[styles.warnText, { color: Colors.danger }]}>
+            Enter your value to publish.
+          </Text>
+        )}
       </View>
     );
   };
@@ -395,7 +406,7 @@ export default function ReviewListingScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={handleEditDetails}
+          onPress={() => goBack()}
           style={styles.backBtn}
           activeOpacity={0.7}
         >
@@ -423,7 +434,7 @@ export default function ReviewListingScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
-        <ValuationSection />
+        {renderValuation()}
 
         {/* Images preview */}
         <View
@@ -699,6 +710,8 @@ const styles = StyleSheet.create({
   previewLabel: { ...Typography.bodyMedium, marginBottom: Spacing[1] },
   previewBody: { ...Typography.body, lineHeight: 21 },
   locationRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
+  warnRow: { flexDirection: "row", gap: Spacing[1], marginTop: Spacing[2] },
+  warnText: { ...Typography.caption, flex: 1 },
 
   // CTA
   ctaBar: {

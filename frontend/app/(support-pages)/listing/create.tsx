@@ -210,10 +210,11 @@ export default function CreateListingScreen() {
         desired_trade: desiredTrade.trim() || undefined,
         location: location.trim() || undefined,
       };
-      const created = await createItem(payload);
+      const created = await createItem(payload, images);
 
+      // const created = await createItem(payload);
       // Step 2: Upload images
-      await uploadItemImages(created.id, images);
+      // await uploadItemImages(created.id, images);
 
       // Step 3: Navigate to Review screen with item ID
       router.replace({

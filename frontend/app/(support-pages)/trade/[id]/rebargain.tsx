@@ -232,7 +232,7 @@ export default function ReBargainScreen() {
           {isCash ? (
             <Text style={[styles.currentValue, { color: theme.textMuted }]}>
               {offer.cash_amount
-                ? `₦${Number(offer.cash_amount).toLocaleString()}`
+                ? `$${Number(offer.cash_amount).toLocaleString()}`
                 : "—"}
             </Text>
           ) : (
@@ -296,7 +296,7 @@ export default function ReBargainScreen() {
                   color: theme.textPrimary,
                 },
               ]}
-              placeholder="Enter amount (₦)"
+              placeholder="Enter amount ($)"
               placeholderTextColor={theme.textPlaceholder}
               value={cashAmount}
               onChangeText={setCashAmount}

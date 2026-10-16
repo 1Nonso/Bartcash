@@ -36,29 +36,9 @@ import {
 } from "@/config/items";
 import { createTrade } from "@/config/trades";
 import { showToast } from "@/hooks/toast";
+import { formatValuation, conditionLabel } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatValuation(item: ItemDetail): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `₦${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `₦${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "Brand New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
 function getPrimaryImage(item: ItemDetail): string | null {
   if (!item.images || item.images.length === 0) return null;
   const primary = item.images.find((img) => img.is_primary);
@@ -75,7 +55,7 @@ interface SelectableCardProps {
 
 function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatValuation(item);
+  const valuation = formatValuation(item.valuation);
 
   return (
     <TouchableOpacity
@@ -352,7 +332,7 @@ export default function ProposeTradeScreen() {
 
   if (!receiverItem) return null;
 
-  const receiverValuation = formatValuation(receiverItem);
+  const receiverValuation = formatValuation(receiverItem.valuation);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 

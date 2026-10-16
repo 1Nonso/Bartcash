@@ -24,21 +24,9 @@ import {
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { TradeListItem, TradeStatus, getTrades } from "@/config/trades";
+import { timeAgo } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return `${Math.floor(days / 7)}w`;
-}
-
 function statusConfig(status: TradeStatus): {
   label: string;
   color: string;

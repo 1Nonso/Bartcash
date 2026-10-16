@@ -175,7 +175,7 @@ function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
       {offer.trade_type === "cash" ? (
         <Text style={[styles.offerAmount, { color: theme.textPrimary }]}>
           {offer.cash_amount
-            ? `₦${Number(offer.cash_amount).toLocaleString()}`
+            ? `$${Number(offer.cash_amount).toLocaleString()}`
             : "—"}
         </Text>
       ) : (
@@ -201,7 +201,7 @@ function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
           </View>
           {offer.top_up_amount && Number(offer.top_up_amount) > 0 && (
             <Text style={[styles.offerTopUpText, { color: theme.textMuted }]}>
-              Plus a cash top-up of ₦
+              Plus a cash top-up of $
               {Number(offer.top_up_amount).toLocaleString()}
             </Text>
           )}
@@ -256,11 +256,11 @@ function OfferHistorySection({
               >
                 {entry.trade_type === "cash"
                   ? entry.cash_amount
-                    ? `₦${Number(entry.cash_amount).toLocaleString()}`
+                    ? `$${Number(entry.cash_amount).toLocaleString()}`
                     : "—"
                   : `${entry.offered_item_ids.length} item(s)${
                       entry.top_up_amount && Number(entry.top_up_amount) > 0
-                        ? ` + ₦${Number(entry.top_up_amount).toLocaleString()} top-up`
+                        ? ` + $${Number(entry.top_up_amount).toLocaleString()} top-up`
                         : ""
                     }`}
               </Text>

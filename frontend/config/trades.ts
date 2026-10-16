@@ -40,6 +40,7 @@ export interface TradeItem {
   id: string;
   title: string;
   primary_image: string | null;
+  valuation: any;
 }
 
 export interface TradeMessage {

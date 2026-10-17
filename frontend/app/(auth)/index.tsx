@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import { useEffect } from "react";
+import { View, Text, StyleSheet, Animated, Easing, useAnimatedValue } from "react-native";
 import { router } from "expo-router";
 import { Image } from "expo-image";
 import * as SplashScreen from "expo-splash-screen";
@@ -13,11 +13,11 @@ import lightLogo from "@/assets/images/bartcash-logo-white.svg";
 export default function SplashScreenComponent() {
   const theme = useAuthTheme();
 
-  const logoScale = useRef(new Animated.Value(0.6)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const ringScale = useRef(new Animated.Value(0.4)).current;
-  const ringOpacity = useRef(new Animated.Value(0.6)).current;
+  const logoScale = useAnimatedValue(0.6);
+  const logoOpacity = useAnimatedValue(0);
+  const taglineOpacity = useAnimatedValue(0);
+  const ringScale = useAnimatedValue(0.4);
+  const ringOpacity = useAnimatedValue(0.6);
 
   useEffect(() => {
     SplashScreen.hideAsync();

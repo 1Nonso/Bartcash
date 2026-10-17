@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   ScrollView,
+  useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
@@ -36,9 +37,9 @@ export default function ResetPasswordScreen() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const contentAnim = useRef(new Animated.Value(0)).current;
-  const contentTranslate = useRef(new Animated.Value(20)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const contentAnim = useAnimatedValue(0);
+  const contentTranslate = useAnimatedValue(20);
+  const buttonScale = useAnimatedValue(1);
 
   useEffect(() => {
     Animated.parallel([

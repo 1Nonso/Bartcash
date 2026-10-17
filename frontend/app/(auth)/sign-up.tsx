@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   ActivityIndicator,
+  useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
@@ -98,12 +99,12 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const headerTranslate = useRef(new Animated.Value(-20)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const cardTranslate = useRef(new Animated.Value(30)).current;
-  const bottomAnim = useRef(new Animated.Value(0)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const headerAnim = useAnimatedValue(0);
+  const headerTranslate = useAnimatedValue(-20);
+  const cardAnim = useAnimatedValue(0);
+  const cardTranslate = useAnimatedValue(30);
+  const bottomAnim = useAnimatedValue(0);
+  const buttonScale = useAnimatedValue(1);
 
   useRef(
     (() => {

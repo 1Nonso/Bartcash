@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
+  useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
@@ -33,8 +34,8 @@ export default function OTPVerificationScreen() {
   const [cooldown, setCooldown] = useState(0);
 
   const inputRefs = useRef<(TextInput | null)[]>(Array(OTP_LENGTH).fill(null));
-  const contentAnim = useRef(new Animated.Value(0)).current;
-  const contentTranslate = useRef(new Animated.Value(20)).current;
+  const contentAnim = useAnimatedValue(0);
+  const contentTranslate = useAnimatedValue(20);
 
   useEffect(() => {
     Animated.parallel([

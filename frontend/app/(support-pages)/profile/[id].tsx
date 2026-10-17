@@ -11,7 +11,7 @@
  *   GET /user/profile                          (to get own ID for redirect check)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -190,8 +191,8 @@ export default function ViewUserProfileScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Entrance animations
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(120, [

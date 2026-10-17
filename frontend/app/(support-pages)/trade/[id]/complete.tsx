@@ -25,6 +25,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -90,10 +91,10 @@ export default function TradeCompletionScreen() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const noticeAnim = useRef(new Animated.Value(0)).current;
-  const ctaAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const cardAnim = useAnimatedValue(0);
+  const noticeAnim = useAnimatedValue(0);
+  const ctaAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [

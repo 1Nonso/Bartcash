@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -69,7 +70,7 @@ export default function EditListingScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Entrance animation
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 

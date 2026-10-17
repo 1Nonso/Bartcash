@@ -12,6 +12,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -117,7 +118,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   const range = formatValuationRange(valuation);
   const confidenceLevel = normalizeConfidence(valuation?.confidence ?? null);
   const confidenceFill = confidenceFillPercent(confidenceLevel);
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useAnimatedValue(0);
 
   const isOverride =
     valuation?.status === "completed" && valuation.confidence === null;
@@ -321,7 +322,7 @@ export default function ListingDetailScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   // ── handleBack is now correctly inside the component ──────────────────────
   const handleBack = useCallback(() => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +12,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -233,8 +234,8 @@ export default function MyListingsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [

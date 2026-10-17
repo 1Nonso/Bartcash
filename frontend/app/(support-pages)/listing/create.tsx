@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -114,8 +115,8 @@ export default function CreateListingScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Entrance animation
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const bodyAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [

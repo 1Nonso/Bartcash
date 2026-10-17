@@ -25,6 +25,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -250,8 +251,8 @@ export default function SearchScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Entrance animation
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const bodyAnim = useAnimatedValue(0);
 
   const CONDITIONS: { label: string; value: Condition }[] = [
     { label: "New", value: "new" },

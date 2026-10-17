@@ -15,7 +15,7 @@
  *  - POST /ratings with trade_id, score, review
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -29,6 +29,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -127,15 +128,15 @@ export default function RatingScreen() {
   } | null>(null);
 
   // Animations
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const heroAnim = useRef(new Animated.Value(0)).current;
-  const starsAnim = useRef(new Animated.Value(0)).current;
-  const formAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const heroAnim = useAnimatedValue(0);
+  const starsAnim = useAnimatedValue(0);
+  const formAnim = useAnimatedValue(0);
 
   // Star scale animations
-  const starScales = useRef(
+  const [starScales] = useState(() =>
     [1, 2, 3, 4, 5].map(() => new Animated.Value(1)),
-  ).current;
+  );
 
   useEffect(() => {
     Animated.stagger(80, [

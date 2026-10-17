@@ -38,6 +38,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
@@ -504,8 +505,8 @@ export default function ChatThreadScreen() {
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestMessageIdRef = useRef<string | null>(null);
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const inputBarAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const inputBarAnim = useAnimatedValue(0);
 
   // ── Load current user ───────────────────────────────────────────────────────
 

@@ -4,7 +4,6 @@ import {
   Alert,
   Animated,
   Image,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -20,7 +19,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -30,7 +28,6 @@ import {
   TradeItem,
   TradeOfferHistoryEntry,
   CurrentOffer,
-  acceptTrade,
   cancelTrade,
   completeTrade,
   declineTrade,
@@ -974,7 +971,7 @@ export default function TradeDetailScreen() {
               ]}
             >
               <Text style={[styles.waitingText, { color: Colors.warning }]}>
-                Awaiting {otherParty?.first_name}'s response.
+                Awaiting {otherParty?.first_name}&apos;s response.
               </Text>
             </View>
             {isProposer && (

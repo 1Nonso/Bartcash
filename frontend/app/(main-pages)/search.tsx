@@ -334,7 +334,7 @@ export default function SearchScreen() {
         setNextCursor(data.next_cursor);
         setHasSearched(true);
         setError(null);
-      } catch (err: any) {
+      } catch {
         if (myId !== requestId.current) return;
         setError("Search failed. Please try again.");
         setHasSearched(true);

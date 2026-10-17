@@ -27,7 +27,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
-import { router } from "expo-router";
+import {  } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -36,7 +36,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -102,7 +101,7 @@ export default function EditProfileScreen() {
       setBio(user.bio ?? "");
       setLocation(user.location ?? "");
       setAvatarUri(user.profilePhoto);
-    } catch (err: any) {
+    } catch {
       Alert.alert("Error", "Failed to load profile. Please try again.");
     } finally {
       setLoadingProfile(false);

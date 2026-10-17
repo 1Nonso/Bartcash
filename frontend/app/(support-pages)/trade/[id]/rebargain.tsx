@@ -276,7 +276,7 @@ export default function ReBargainScreen() {
           >
             <Ionicons name="sparkles" size={14} color={Colors.ai} />
             <Text style={[styles.aiReferenceText, { color: Colors.ai }]}>
-              Their item's AI value: ${theirItemValue.toLocaleString()}
+              Their item&apos;s AI value: ${theirItemValue.toLocaleString()}
             </Text>
           </View>
         )}
@@ -425,7 +425,7 @@ export default function ReBargainScreen() {
               ]}
             >
               Your offer is ${Math.abs(valueDiff).toLocaleString()}{" "}
-              {valueDiff >= 0 ? "above" : "below"} their item's value
+              {valueDiff >= 0 ? "above" : "below"} their item&apos;s value
             </Text>
           </View>
         )}

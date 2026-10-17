@@ -11,10 +11,9 @@ import "react-native-reanimated";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import Toast from "react-native-toast-message";
-import { isExpo } from "@/config/notifications";
+import { isExpo, registerForPushNotifications } from "@/config/notifications";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { hasSession, refreshTokens } from "@/config/auth";
-import { registerForPushNotifications } from "@/config/notifications";
 import { Colors } from "@/constants";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 

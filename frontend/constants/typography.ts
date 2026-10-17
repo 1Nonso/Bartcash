@@ -14,7 +14,7 @@
 import { Platform, TextStyle } from 'react-native';
 
 // Platform-native font stacks
-const fontFamily = {
+export const fontFamily = {
   /** Default system sans (SF Pro / Roboto) */
   sans: Platform.select({
     ios: undefined,   // undefined = system default on iOS (SF Pro)

@@ -5,7 +5,6 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -83,7 +82,7 @@ export default function RaiseDisputeScreen() {
         }
 
         setTrade(data);
-      } catch (err: any) {
+      } catch {
         Alert.alert("Error", "Failed to load trade details.");
         goBack();
       } finally {

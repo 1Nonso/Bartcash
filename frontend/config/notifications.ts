@@ -1,8 +1,7 @@
 import api from "./api";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
-import { ExecutionEnvironment } from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,6 @@ import {
   Dimensions,
   FlatList,
   Image,
-  ScrollView,
   Share,
   StatusBar,
   StyleSheet,
@@ -22,7 +21,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";

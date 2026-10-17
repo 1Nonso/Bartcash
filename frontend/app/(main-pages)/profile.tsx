@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  FlatList,
   Image,
   ScrollView,
   StatusBar,
@@ -20,12 +19,11 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
-import { logout, getStoredUser } from "@/config/auth";
+import { logout } from "@/config/auth";
 import api from "@/config/api";
 import { formatValuation } from "@/constants/listing";
 

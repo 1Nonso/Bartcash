@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -124,15 +124,6 @@ export default function ResetPasswordScreen() {
       setLoading(false);
     }
   };
-
-  const inputStyle = (field: string) => [
-    styles.input,
-    {
-      backgroundColor: focused === field ? theme.inputBgFocused : theme.inputBg,
-      borderColor: focused === field ? theme.borderFocus : theme.borderDefault,
-      color: theme.textPrimary,
-    },
-  ];
 
   // ── No token state ────────────────────────────────────────────────────────
   if (!token) {

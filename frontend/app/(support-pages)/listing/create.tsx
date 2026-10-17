@@ -24,7 +24,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -34,7 +33,6 @@ import {
   CreateItemPayload,
   createItem,
   getCategories,
-  uploadItemImages,
 } from "@/config/items";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
-import { ItemDetail, MyItem, deleteItem, getMyItems } from "@/config/items";
+import { ItemDetail, deleteItem, getMyItems } from "@/config/items";
 import { formatValuation, conditionLabel } from "@/constants/listing";
 
 type FilterTab = "all" | "available" | "in_trade" | "traded" | "inactive";

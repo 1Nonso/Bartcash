@@ -13,6 +13,9 @@ import axios, { InternalAxiosRequestConfig } from "axios";
 import { getAccessToken, refreshTokens, clearSession } from "./auth";
 
 // ─── Create Instance ──────────────────────────────────────────────────────────
+// axios.create is the documented factory; the default-member rule is a false
+// positive here.
+// eslint-disable-next-line import/no-named-as-default-member
 const api = axios.create({
   baseURL: process.env.EXPO_PUBLIC_API_BASE_URL,
   timeout: 10000,

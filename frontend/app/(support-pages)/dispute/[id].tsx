@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Image,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -122,7 +121,7 @@ export default function DisputeDetailScreen() {
           tension: 55,
           friction: 11,
         }).start();
-      } catch (err: any) {
+      } catch {
         Alert.alert("Error", "Failed to load dispute details.");
         goBack();
       } finally {

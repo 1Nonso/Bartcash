@@ -31,7 +31,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,46 +48,6 @@ import { Trade, getTradeById } from "@/config/trades";
 import { submitRating } from "@/config/ratings";
 import { getStoredUser } from "@/config/auth";
 import { showToast } from "@/hooks/toast";
-
-// ─── Star Rating Component ────────────────────────────────────────────────────
-
-interface StarRatingProps {
-  value: number;
-  onChange?: (score: number) => void;
-  readonly?: boolean;
-  size?: number;
-}
-
-function StarRating({
-  value,
-  onChange,
-  readonly = false,
-  size = 40,
-}: StarRatingProps) {
-  return (
-    <View style={styles.starsRow}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <TouchableOpacity
-          key={star}
-          onPress={() => {
-            if (readonly || !onChange) return;
-            // Tap same star to deselect
-            onChange(star === value ? 0 : star);
-          }}
-          activeOpacity={readonly ? 1 : 0.7}
-          disabled={readonly}
-          style={styles.starBtn}
-        >
-          <Ionicons
-            name={star <= value ? "star" : "star-outline"}
-            size={size}
-            color={star <= value ? Colors.warning : Colors.gray[300]}
-          />
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
 
 // ─── Rating label helper ──────────────────────────────────────────────────────
 
@@ -122,10 +82,6 @@ export default function RatingScreen() {
 
   // Already rated state
   const [alreadyRated, setAlreadyRated] = useState(false);
-  const [existingRating, setExistingRating] = useState<{
-    score: number;
-    review: string | null;
-  } | null>(null);
 
   // Animations
   const headerAnim = useAnimatedValue(0);
@@ -249,7 +205,6 @@ export default function RatingScreen() {
     if (mine) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill the form once the trade and user have loaded
       setAlreadyRated(true);
-      setExistingRating({ score: mine.score, review: mine.review });
       setScore(mine.score);
       setReview(mine.review ?? "");
     }

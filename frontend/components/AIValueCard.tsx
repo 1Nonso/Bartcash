@@ -33,7 +33,13 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from "react-native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "@/constants";
 
 // ─── Single Item AI Value Card ─────────────────────────────────────────────
@@ -141,7 +147,6 @@ export const TradeOfferCard: React.FC<TradeOfferCardProps> = ({
   onReject,
   style,
 }) => {
-  const { TouchableOpacity } = require("react-native");
   return (
     <View style={[styles.offerCard, style]}>
       {/* Header */}

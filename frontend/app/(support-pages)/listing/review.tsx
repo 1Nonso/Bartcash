@@ -328,7 +328,7 @@ export default function ReviewListingScreen() {
             { color: theme.textMuted, marginBottom: Spacing[2] },
           ]}
         >
-          Compulsory — what you think it's worth
+          Compulsory — what you think it&apos;s worth
         </Text>
         <TextInput
           style={[

@@ -1,4 +1,4 @@
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing } from "@/constants";
 import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
 
 // ─── Sell Button — elevated center tab ───────────────────────────────────────
 function SellTabButton({

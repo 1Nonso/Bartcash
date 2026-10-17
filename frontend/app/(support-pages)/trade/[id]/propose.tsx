@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  FlatList,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -31,7 +30,6 @@ import {
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import {
   ItemDetail,
-  MarketplaceItem,
   getItemById,
   getMyItems,
 } from "@/config/items";
@@ -179,7 +177,7 @@ export default function ProposeTradeScreen() {
         ]);
         setReceiverItem(itemData);
         setMyItems(myItemsData.items);
-      } catch (err: any) {
+      } catch {
         Alert.alert("Error", "Failed to load listing details.");
         goBack();
       } finally {

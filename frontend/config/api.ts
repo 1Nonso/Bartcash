@@ -10,7 +10,13 @@
  */
 
 import axios, { InternalAxiosRequestConfig } from "axios";
-import { getAccessToken, refreshTokens, clearSession } from "./auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  REFRESH_TOKEN_KEY,
+  getAccessToken,
+  setAccessToken,
+  clearSession,
+} from "./session";
 
 // ─── Create Instance ──────────────────────────────────────────────────────────
 // axios.create is the documented factory; the default-member rule is a false
@@ -45,6 +51,40 @@ function processQueue(error: any, token: string | null = null) {
     }
   });
   failedQueue = [];
+}
+
+// ─── Refresh Token ────────────────────────────────────────────────────────────
+/**
+ * POST /auth/refresh
+ * Exchanges the stored refresh token for a new access + refresh token pair.
+ * Called automatically by the response interceptor when a 401 is received.
+ * Also called on app start to restore the session (re-exported by auth.ts).
+ * Lives here, not in auth.ts, so api.ts never imports auth.ts.
+ */
+export async function refreshTokens(): Promise<boolean> {
+  try {
+    const storedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!storedRefreshToken) return false;
+
+    const response = await api.post("/auth/refresh", {
+      refresh_token: storedRefreshToken,
+    });
+
+    if (response.data?.data?.access_token) {
+      setAccessToken(response.data.data.access_token);
+      await AsyncStorage.setItem(
+        REFRESH_TOKEN_KEY,
+        response.data.data.refresh_token,
+      );
+      return true;
+    }
+
+    return false;
+  } catch {
+    // Refresh token expired or revoked — session is dead
+    await clearSession();
+    return false;
+  }
 }
 
 // ─── Request Interceptor ──────────────────────────────────────────────────────

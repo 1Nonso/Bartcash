@@ -91,7 +91,7 @@ export default function RaiseDisputeScreen() {
       }
     };
     load();
-  }, [tradeId]);
+  }, [contentAnim, headerAnim, tradeId]);
 
   // ── Submit ───────────────────────────────────────────────────────────────────
 

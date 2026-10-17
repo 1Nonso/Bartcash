@@ -182,6 +182,7 @@ export default function RatingScreen() {
     });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; loadData is recreated each render
   }, []);
 
   // Animate star bounce on selection

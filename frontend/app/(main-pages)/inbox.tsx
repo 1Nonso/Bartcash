@@ -302,7 +302,7 @@ export default function InboxScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -348,7 +348,7 @@ export default function InboxScreen() {
       setLoading(false);
     };
     load();
-  }, [activeTab]);
+  }, [activeTab, fetchTrades]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

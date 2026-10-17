@@ -294,7 +294,7 @@ export default function SearchScreen() {
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
-  }, []);
+  }, [bodyAnim, headerAnim]);
 
   // ── Search logic ─────────────────────────────────────────────────────────────
 
@@ -455,7 +455,14 @@ export default function SearchScreen() {
         )}
       </View>
     );
-  }, [loading, hasSearched, activeFiltersCount, theme]);
+  }, [
+    loading,
+    hasSearched,
+    theme.textPrimary,
+    theme.textMuted,
+    activeFiltersCount,
+    handleClearAll,
+  ]);
 
   // ── Main render ───────────────────────────────────────────────────────────────
 

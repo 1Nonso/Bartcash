@@ -127,7 +127,7 @@ export default function EditProfileScreen() {
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     fetchProfile();
-  }, []);
+  }, [bodyAnim, headerAnim]);
 
   // ── Avatar picker ────────────────────────────────────────────────────────────
 
@@ -177,7 +177,7 @@ export default function EditProfileScreen() {
     });
   };
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (!firstName.trim()) newErrors.first_name = "First name is required.";
     if (!lastName.trim()) newErrors.last_name = "Last name is required.";
@@ -186,7 +186,7 @@ export default function EditProfileScreen() {
       newErrors.location = "Location must be under 100 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [firstName, lastName, bio, location]);
 
   // ── Save changes ─────────────────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ export default function EditProfileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [firstName, lastName, bio, location, avatarUri, avatarChanged]);
+  }, [validate, avatarChanged, avatarUri, firstName, lastName, bio, location]);
 
   // ── Back guard ───────────────────────────────────────────────────────────────
 

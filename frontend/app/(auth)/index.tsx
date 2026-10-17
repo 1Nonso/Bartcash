@@ -106,7 +106,7 @@ export default function SplashScreenComponent() {
     // Check session after animation has had time to show
     const timer = setTimeout(checkSession, 3500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [logoOpacity, logoScale, ringOpacity, ringScale, taglineOpacity]);
 
   const logo = theme.isDark ? lightLogo : darkLogo;
 

@@ -188,7 +188,7 @@ export default function ProposeTradeScreen() {
       }
     };
     loadAll();
-  }, [receiverItemId]);
+  }, [contentAnim, headerAnim, receiverItemId]);
 
   // ── Toggle item selection ────────────────────────────────────────────────────
 

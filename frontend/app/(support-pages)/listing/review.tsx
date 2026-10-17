@@ -122,7 +122,7 @@ export default function ReviewListingScreen() {
         prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
       );
     }, POLL_TIMEOUT_MS);
-  }, []);
+  }, [stopPolling]);
 
   // ── Load item ────────────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ export default function ReviewListingScreen() {
     return () => {
       stopPolling();
     };
-  }, [id]);
+  }, [contentAnim, id, startPolling, stopPolling]);
 
   // ── Publish ──────────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
@@ -181,14 +181,14 @@ export default function ReviewListingScreen() {
     } finally {
       setPublishing(false);
     }
-  }, [item, declaredValue]);
+  }, [item, declaredValid, declaredNum]);
 
   const handleEditDetails = useCallback(() => {
     router.push({
       pathname: "/(support-pages)/listing/[id]/edit",
       params: { id: item?.id },
     });
-  }, []);
+  }, [item?.id]);
 
   const handleRetryValuation = useCallback(async () => {
     if (!item) return;

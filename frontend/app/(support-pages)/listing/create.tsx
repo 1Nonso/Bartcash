@@ -142,7 +142,7 @@ export default function CreateListingScreen() {
     ]).start();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
-  }, []);
+  }, [bodyAnim, headerAnim]);
 
   // ── Validation ───────────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ export default function CreateListingScreen() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (images.length < 1) newErrors.images = "Please add at least 1 photo.";
     if (!title.trim()) newErrors.title = "Title is required.";
@@ -195,7 +195,7 @@ export default function CreateListingScreen() {
       newErrors.description = "Description must be at least 20 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [images, title, selectedCategory, condition, description]);
 
   // ── Submit ───────────────────────────────────────────────────────────────────
 
@@ -254,6 +254,7 @@ export default function CreateListingScreen() {
       setLoading(false);
     }
   }, [
+    validate,
     title,
     description,
     selectedCategory,

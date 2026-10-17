@@ -108,7 +108,7 @@ export default function EditListingScreen() {
       }
     };
     load();
-  }, [id]);
+  }, [contentAnim, id]);
 
   // ── Validation ───────────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ export default function EditListingScreen() {
     });
   };
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (!title.trim()) newErrors.title = "Title is required.";
     else if (title.trim().length > 255)
@@ -132,7 +132,7 @@ export default function EditListingScreen() {
       newErrors.description = "Description must be at least 20 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [title, selectedCategory, condition, description]);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
 
@@ -174,6 +174,7 @@ export default function EditListingScreen() {
       setSaving(false);
     }
   }, [
+    validate,
     id,
     title,
     description,

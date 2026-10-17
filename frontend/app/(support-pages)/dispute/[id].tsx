@@ -130,7 +130,7 @@ export default function DisputeDetailScreen() {
       }
     };
     load();
-  }, [id]);
+  }, [contentAnim, id]);
 
   // ── Loading ──────────────────────────────────────────────────────────────────
 

@@ -245,7 +245,7 @@ export default function DashboardScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Data fetching ────────────────────────────────────────────────────────────
 
@@ -299,7 +299,7 @@ export default function DashboardScreen() {
       setLoading(false);
     };
     init();
-  }, []);
+  }, [fetchCategories, fetchItems]);
 
   useFocusEffect(
     useCallback(() => {
@@ -395,7 +395,14 @@ export default function DashboardScreen() {
         )}
       </View>
     );
-  }, [loading, selectedCategory, theme]);
+  }, [
+    error,
+    handleCategorySelect,
+    loading,
+    selectedCategory,
+    theme.textMuted,
+    theme.textPrimary,
+  ]);
 
   // ── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -494,14 +501,7 @@ export default function DashboardScreen() {
         )}
       </View>
     ),
-    [
-      selectedCategory,
-      categories,
-      error,
-      theme,
-      handleCategorySelect,
-      handleRefresh,
-    ],
+    [selectedCategory, categories, error, handleCategorySelect, handleRefresh],
   );
 
   // ── Main render ───────────────────────────────────────────────────────────────

@@ -141,6 +141,7 @@ export default function TradeCompletionScreen() {
     ]).start();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; loadData is recreated each render
   }, []);
 
   const handleConfirm = useCallback(async () => {

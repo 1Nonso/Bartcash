@@ -536,7 +536,7 @@ export default function ChatThreadScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [headerAnim, inputBarAnim]);
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -618,6 +618,7 @@ export default function ChatThreadScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- (re)load when the trade changes; shows the loader first
     loadInitial();
     return () => stopPolling();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per trade id; loadInitial is recreated each render
   }, [tradeId]);
 
   // ── Load older messages ─────────────────────────────────────────────────────

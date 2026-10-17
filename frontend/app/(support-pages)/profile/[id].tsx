@@ -209,7 +209,7 @@ export default function ViewUserProfileScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch data ───────────────────────────────────────────────────────────────
 
@@ -241,10 +241,11 @@ export default function ViewUserProfileScreen() {
         const userItems = items.filter((item) => item.owner?.id === id);
         setListings(userItems);
 
-        // Build public user from first listing's owner
-        if (userItems.length > 0 && !user) {
+        // Build public user from first listing's owner (only if not set yet;
+        // the functional update keeps fetchData independent of `user`)
+        if (userItems.length > 0) {
           const owner = userItems[0].owner;
-          setUser({
+          setUser((prev) => prev ?? {
             id: owner.id,
             first_name: owner.first_name,
             last_name: owner.last_name,

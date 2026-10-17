@@ -251,7 +251,7 @@ export default function MyListingsScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ export default function MyListingsScreen() {
       setLoading(false);
     };
     load();
-  }, [activeTab]);
+  }, [activeTab, fetchItems]);
 
   // ── Search filter (client-side) ──────────────────────────────────────────────
 

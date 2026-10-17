@@ -52,7 +52,7 @@ export default function OTPVerificationScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, contentTranslate]);
 
   // Countdown timer for resend cooldown
   useEffect(() => {

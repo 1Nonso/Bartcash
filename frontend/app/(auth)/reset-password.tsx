@@ -61,7 +61,7 @@ export default function ResetPasswordScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, contentTranslate]);
 
   // Auto-navigate to login after successful reset
   useEffect(() => {

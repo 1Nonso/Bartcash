@@ -59,6 +59,7 @@ function Slide({
   useFocusEffect(
     useCallback(() => {
       if (index === 0) triggerIn();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replay only when the screen regains focus; triggerIn is recreated each render
     }, []),
   );
 

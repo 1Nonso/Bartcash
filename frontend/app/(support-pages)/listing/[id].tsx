@@ -131,7 +131,7 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         useNativeDriver: false,
       }).start();
     }
-  }, [valuation?.status]);
+  }, [confidenceFill, isOverride, progressAnim, valuation?.status]);
 
   if (!valuation || valuation.status === "failed") {
     return (
@@ -359,7 +359,7 @@ export default function ListingDetailScreen() {
         stopValuationPolling();
       }
     }, POLL_INTERVAL);
-  }, []);
+  }, [stopValuationPolling]);
 
   const fetchItem = useCallback(async () => {
     if (!id) return;
@@ -388,13 +388,13 @@ export default function ListingDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [contentAnim, id, startValuationPolling]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     fetchItem();
     return () => stopValuationPolling();
-  }, [fetchItem]);
+  }, [fetchItem, stopValuationPolling]);
 
   const isOwner = item ? item.owner.id === currentUserId : false;
   const canProposeTrade = !isOwner && item?.status === "available";

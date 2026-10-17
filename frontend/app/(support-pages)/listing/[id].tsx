@@ -339,6 +339,28 @@ export default function ListingDetailScreen() {
     });
   }, []);
 
+  const stopValuationPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startValuationPolling = useCallback((itemId: string) => {
+    stopValuationPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const valuation = await getItemValuation(itemId);
+        if (valuation.status !== "pending") {
+          stopValuationPolling();
+          setItem((prev) => (prev ? { ...prev, valuation } : prev));
+        }
+      } catch {
+        stopValuationPolling();
+      }
+    }, POLL_INTERVAL);
+  }, []);
+
   const fetchItem = useCallback(async () => {
     if (!id) return;
     try {
@@ -369,31 +391,10 @@ export default function ListingDetailScreen() {
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     fetchItem();
     return () => stopValuationPolling();
   }, [fetchItem]);
-
-  const startValuationPolling = useCallback((itemId: string) => {
-    stopValuationPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const valuation = await getItemValuation(itemId);
-        if (valuation.status !== "pending") {
-          stopValuationPolling();
-          setItem((prev) => (prev ? { ...prev, valuation } : prev));
-        }
-      } catch {
-        stopValuationPolling();
-      }
-    }, POLL_INTERVAL);
-  }, []);
-
-  const stopValuationPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
 
   const isOwner = item ? item.owner.id === currentUserId : false;
   const canProposeTrade = !isOwner && item?.status === "available";

@@ -538,48 +538,7 @@ export default function ChatThreadScreen() {
     ]).start();
   }, []);
 
-  // ── Initial data load ───────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!tradeId) return;
-    loadInitial();
-    return () => stopPolling();
-  }, [tradeId]);
-
-  const loadInitial = async () => {
-    setLoading(true);
-    try {
-      const [tradeData, messagesData] = await Promise.all([
-        getTradeById(tradeId!),
-        getTradeMessages(tradeId!, { limit: 30 }),
-      ]);
-      setTrade(tradeData);
-      setMessages(messagesData.messages);
-      setNextCursor(messagesData.next_cursor);
-
-      if (messagesData.messages.length > 0) {
-        latestMessageIdRef.current =
-          messagesData.messages[messagesData.messages.length - 1].id;
-      }
-
-      // Mark messages as read
-      await markMessagesRead(tradeId!).catch(() => {});
-
-      setError(null);
-      startPolling();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load chat.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // ── Polling ─────────────────────────────────────────────────────────────────
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollTimerRef.current = setInterval(pollMessages, POLL_INTERVAL);
-  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -617,6 +576,48 @@ export default function ChatThreadScreen() {
     } catch {
       // Silent — polling errors don't interrupt the user
     }
+  }, [tradeId]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollTimerRef.current = setInterval(pollMessages, POLL_INTERVAL);
+  }, [stopPolling, pollMessages]);
+
+  // ── Initial data load ───────────────────────────────────────────────────────
+
+  const loadInitial = async () => {
+    setLoading(true);
+    try {
+      const [tradeData, messagesData] = await Promise.all([
+        getTradeById(tradeId!),
+        getTradeMessages(tradeId!, { limit: 30 }),
+      ]);
+      setTrade(tradeData);
+      setMessages(messagesData.messages);
+      setNextCursor(messagesData.next_cursor);
+
+      if (messagesData.messages.length > 0) {
+        latestMessageIdRef.current =
+          messagesData.messages[messagesData.messages.length - 1].id;
+      }
+
+      // Mark messages as read
+      await markMessagesRead(tradeId!).catch(() => {});
+
+      setError(null);
+      startPolling();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to load chat.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!tradeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- (re)load when the trade changes; shows the loader first
+    loadInitial();
+    return () => stopPolling();
   }, [tradeId]);
 
   // ── Load older messages ─────────────────────────────────────────────────────

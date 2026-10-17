@@ -311,6 +311,7 @@ export default function TradeDetailScreen() {
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadTrade();
   }, [loadTrade]);
 

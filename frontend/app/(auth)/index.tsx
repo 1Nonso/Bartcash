@@ -19,6 +19,31 @@ export default function SplashScreenComponent() {
   const ringScale = useAnimatedValue(0.4);
   const ringOpacity = useAnimatedValue(0.6);
 
+  const checkSession = async () => {
+    try {
+      const sessionExists = await hasSession();
+
+      if (sessionExists) {
+        // A refresh token exists — try to get a fresh access token
+        const refreshed = await refreshTokens();
+
+        if (refreshed) {
+          // Session restored — go to main app
+          router.replace("/(main-pages)/dashboard");
+        } else {
+          // Refresh token was expired or revoked — go to login
+          router.replace("/onboarding");
+        }
+      } else {
+        // No session at all — first time user or logged out
+        router.replace("/onboarding");
+      }
+    } catch {
+      // Something went wrong — safe fallback to onboarding
+      router.replace("/onboarding");
+    }
+  };
+
   useEffect(() => {
     SplashScreen.hideAsync();
 
@@ -82,31 +107,6 @@ export default function SplashScreenComponent() {
     const timer = setTimeout(checkSession, 3500);
     return () => clearTimeout(timer);
   }, []);
-
-  const checkSession = async () => {
-    try {
-      const sessionExists = await hasSession();
-
-      if (sessionExists) {
-        // A refresh token exists — try to get a fresh access token
-        const refreshed = await refreshTokens();
-
-        if (refreshed) {
-          // Session restored — go to main app
-          router.replace("/(main-pages)/dashboard");
-        } else {
-          // Refresh token was expired or revoked — go to login
-          router.replace("/onboarding");
-        }
-      } else {
-        // No session at all — first time user or logged out
-        router.replace("/onboarding");
-      }
-    } catch {
-      // Something went wrong — safe fallback to onboarding
-      router.replace("/onboarding");
-    }
-  };
 
   const logo = theme.isDark ? lightLogo : darkLogo;
 

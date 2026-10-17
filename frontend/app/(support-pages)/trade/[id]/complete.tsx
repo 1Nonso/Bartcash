@@ -96,6 +96,22 @@ export default function TradeCompletionScreen() {
   const noticeAnim = useAnimatedValue(0);
   const ctaAnim = useAnimatedValue(0);
 
+  const loadData = async () => {
+    try {
+      const [raw, tradeData] = await Promise.all([
+        AsyncStorage.getItem(USER_KEY),
+        getTradeById(id!),
+      ]);
+      if (raw) setCurrentUserId(JSON.parse(raw).id);
+      setTrade(tradeData);
+      setError(null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to load trade details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     Animated.stagger(100, [
       Animated.spring(headerAnim, {
@@ -123,24 +139,9 @@ export default function TradeCompletionScreen() {
         friction: 10,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadData();
   }, []);
-
-  const loadData = async () => {
-    try {
-      const [raw, tradeData] = await Promise.all([
-        AsyncStorage.getItem(USER_KEY),
-        getTradeById(id!),
-      ]);
-      if (raw) setCurrentUserId(JSON.parse(raw).id);
-      setTrade(tradeData);
-      setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load trade details.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleConfirm = useCallback(async () => {
     if (!id) return;

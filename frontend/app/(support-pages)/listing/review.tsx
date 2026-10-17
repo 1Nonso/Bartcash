@@ -86,6 +86,44 @@ export default function ReviewListingScreen() {
     low: { label: "Low Confidence", bars: 1, color: Colors.danger },
   };
 
+  // ── Polling ──────────────────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((itemId: string) => {
+    stopPolling();
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const v = await getItemValuation(itemId);
+        setValuation(v);
+        if (v.status !== "pending") {
+          stopPolling();
+        }
+      } catch {
+        stopPolling();
+      }
+    }, POLL_INTERVAL);
+
+    // Safety timeout — stop after 60s; if still pending, show it as failed
+    // so the Retry button appears instead of an endless spinner.
+    pollTimeoutRef.current = setTimeout(() => {
+      stopPolling();
+      setValuation((prev) =>
+        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
+      );
+    }, POLL_TIMEOUT_MS);
+  }, []);
+
   // ── Load item ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -119,44 +157,6 @@ export default function ReviewListingScreen() {
       stopPolling();
     };
   }, [id]);
-
-  // ── Polling ──────────────────────────────────────────────────────────────────
-
-  const startPolling = useCallback((itemId: string) => {
-    stopPolling();
-
-    pollRef.current = setInterval(async () => {
-      try {
-        const v = await getItemValuation(itemId);
-        setValuation(v);
-        if (v.status !== "pending") {
-          stopPolling();
-        }
-      } catch {
-        stopPolling();
-      }
-    }, POLL_INTERVAL);
-
-    // Safety timeout — stop after 60s; if still pending, show it as failed
-    // so the Retry button appears instead of an endless spinner.
-    pollTimeoutRef.current = setTimeout(() => {
-      stopPolling();
-      setValuation((prev) =>
-        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
-      );
-    }, POLL_TIMEOUT_MS);
-  }, []);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
 
   // ── Publish ──────────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {

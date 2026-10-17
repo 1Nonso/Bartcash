@@ -138,6 +138,18 @@ export default function RatingScreen() {
     [1, 2, 3, 4, 5].map(() => new Animated.Value(1)),
   );
 
+  const loadData = async () => {
+    try {
+      const tradeData = await getTradeById(id!);
+      setTrade(tradeData);
+      setError(null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to load trade details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     Animated.stagger(80, [
       Animated.spring(headerAnim, {
@@ -168,20 +180,9 @@ export default function RatingScreen() {
     getStoredUser().then((user) => {
       if (user) setCurrentUserId(user.id);
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadData();
   }, []);
-
-  const loadData = async () => {
-    try {
-      const tradeData = await getTradeById(id!);
-      setTrade(tradeData);
-      setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load trade details.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Animate star bounce on selection
   const handleStarSelect = useCallback(
@@ -245,6 +246,7 @@ export default function RatingScreen() {
     if (!trade || !currentUserId) return;
     const mine = trade.ratings?.find((r) => r.rater_id === currentUserId);
     if (mine) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill the form once the trade and user have loaded
       setAlreadyRated(true);
       setExistingRating({ score: mine.score, review: mine.review });
       setScore(mine.score);

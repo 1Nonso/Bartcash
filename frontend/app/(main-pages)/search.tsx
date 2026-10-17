@@ -261,6 +261,21 @@ export default function SearchScreen() {
     { label: "Poor", value: "poor" },
   ];
 
+  // Auto-focus input
+  useFocusEffect(
+    useCallback(() => {
+      const t = setTimeout(() => inputRef.current?.focus(), 200);
+      return () => clearTimeout(t);
+    }, []),
+  );
+
+  const loadCategories = async () => {
+    try {
+      const data = await getCategories();
+      setCategories(data);
+    } catch {}
+  };
+
   useEffect(() => {
     Animated.stagger(80, [
       Animated.spring(headerAnim, {
@@ -277,23 +292,9 @@ export default function SearchScreen() {
       }),
     ]).start();
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
   }, []);
-
-  // Auto-focus input
-  useFocusEffect(
-    useCallback(() => {
-      const t = setTimeout(() => inputRef.current?.focus(), 200);
-      return () => clearTimeout(t);
-    }, []),
-  );
-
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch {}
-  };
 
   // ── Search logic ─────────────────────────────────────────────────────────────
 

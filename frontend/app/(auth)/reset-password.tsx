@@ -34,7 +34,12 @@ export default function ResetPasswordScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  // No token in the URL: show the error from the first render.
+  const [error, setError] = useState(
+    token
+      ? ""
+      : "This reset link is invalid or has expired. Please request a new one.",
+  );
   const [success, setSuccess] = useState(false);
 
   const contentAnim = useAnimatedValue(0);
@@ -56,13 +61,6 @@ export default function ResetPasswordScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    // If no token in the URL — show error immediately
-    if (!token) {
-      setError(
-        "This reset link is invalid or has expired. Please request a new one.",
-      );
-    }
   }, []);
 
   // Auto-navigate to login after successful reset

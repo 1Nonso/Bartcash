@@ -90,25 +90,6 @@ export default function EditProfileScreen() {
   const headerAnim = useAnimatedValue(0);
   const bodyAnim = useAnimatedValue(0);
 
-  useEffect(() => {
-    Animated.stagger(100, [
-      Animated.spring(headerAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 60,
-        friction: 10,
-      }),
-      Animated.spring(bodyAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 60,
-        friction: 10,
-      }),
-    ]).start();
-
-    fetchProfile();
-  }, []);
-
   // ── Fetch current profile ────────────────────────────────────────────────────
 
   const fetchProfile = async () => {
@@ -127,6 +108,26 @@ export default function EditProfileScreen() {
       setLoadingProfile(false);
     }
   };
+
+  useEffect(() => {
+    Animated.stagger(100, [
+      Animated.spring(headerAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+      Animated.spring(bodyAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+    ]).start();
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
+    fetchProfile();
+  }, []);
 
   // ── Avatar picker ────────────────────────────────────────────────────────────
 

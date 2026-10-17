@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -225,7 +225,6 @@ export default function MyListingsScreen() {
   const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<ItemDetail[]>([]);
-  const [filteredItems, setFilteredItems] = useState<ItemDetail[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("available");
   const [searchQuery, setSearchQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -284,15 +283,9 @@ export default function MyListingsScreen() {
 
   // ── Search filter (client-side) ──────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredItems(items);
-    } else {
-      const q = searchQuery.toLowerCase();
-      setFilteredItems(
-        items.filter((item) => item.title.toLowerCase().includes(q)),
-      );
-    }
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return q ? items.filter((item) => item.title.toLowerCase().includes(q)) : items;
   }, [searchQuery, items]);
 
   // ── Refresh ──────────────────────────────────────────────────────────────────

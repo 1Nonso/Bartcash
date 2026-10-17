@@ -209,9 +209,7 @@ export default function ViewUserProfileScreen() {
         friction: 10,
       }),
     ]).start();
-
-    fetchData();
-  }, [id]);
+  }, []);
 
   // ── Fetch data ───────────────────────────────────────────────────────────────
 
@@ -277,6 +275,11 @@ export default function ViewUserProfileScreen() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
+    fetchData();
+  }, [fetchData]);
 
   // ── Report user ───────────────────────────────────────────────────────────────
 

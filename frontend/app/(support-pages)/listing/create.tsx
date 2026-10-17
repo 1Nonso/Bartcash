@@ -118,6 +118,13 @@ export default function CreateListingScreen() {
   const headerAnim = useAnimatedValue(0);
   const bodyAnim = useAnimatedValue(0);
 
+  const loadCategories = async () => {
+    try {
+      const data = await getCategories();
+      setCategories(data);
+    } catch {}
+  };
+
   useEffect(() => {
     Animated.stagger(100, [
       Animated.spring(headerAnim, {
@@ -133,14 +140,18 @@ export default function CreateListingScreen() {
         friction: 10,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
   }, []);
 
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch {}
+  // ── Validation ───────────────────────────────────────────────────────────────
+
+  const clearError = (field: string) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   // ── Image picking ────────────────────────────────────────────────────────────
@@ -170,16 +181,6 @@ export default function CreateListingScreen() {
   const handleRemoveImage = useCallback((index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
-
-  // ── Validation ───────────────────────────────────────────────────────────────
-
-  const clearError = (field: string) => {
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[field];
-      return next;
-    });
-  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};

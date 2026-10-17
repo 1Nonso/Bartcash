@@ -27,9 +27,10 @@ export default function AuthLayout() {
       {/*
         style="auto" lets the OS decide icon color based on bg.
         On a light bg → dark icons. On a dark bg → light icons.
-        This is the correct way to handle theme-responsive status bars.
+        SDK 57 is edge-to-edge, so the bar has no background of its own; the
+        root View's background shows through.
       */}
-      <StatusBar style="auto" backgroundColor={bg} translucent={false} />
+      <StatusBar style="auto" />
 
       <Stack
         screenOptions={{

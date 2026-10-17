@@ -211,7 +211,7 @@ export default function TradeCompletionScreen() {
     : null;
   const agreedAmountLabel =
     agreedAmount && Number(agreedAmount) > 0
-      ? `₦${Number(agreedAmount).toLocaleString()}`
+      ? `$${Number(agreedAmount).toLocaleString()}`
       : null;
 
   if (loading) {

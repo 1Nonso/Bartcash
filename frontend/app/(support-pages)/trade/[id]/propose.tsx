@@ -679,7 +679,7 @@ export default function ProposeTradeScreen() {
                     },
                   ]}
                 >
-                  <Text style={styles.cashPrefix}>₦</Text>
+                  <Text style={styles.cashPrefix}>$</Text>
                   <TextInput
                     style={[styles.cashInput, { color: Colors.success }]}
                     placeholder="0"
@@ -774,7 +774,7 @@ export default function ProposeTradeScreen() {
                           2
                       );
                     }, 0);
-                    return total > 0 ? `₦${total.toLocaleString()}` : "—";
+                    return total > 0 ? `$${total.toLocaleString()}` : "—";
                   })()}
                 </Text>
               </View>

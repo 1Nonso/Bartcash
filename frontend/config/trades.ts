@@ -40,7 +40,13 @@ export interface TradeItem {
   id: string;
   title: string;
   primary_image: string | null;
-  valuation: any;
+  // Not sent by the trade endpoints today; shown when present.
+  condition?: string;
+  valuation?: {
+    status: "pending" | "completed" | "failed";
+    value_min: string | null;
+    value_max: string | null;
+  } | null;
 }
 
 export interface TradeMessage {

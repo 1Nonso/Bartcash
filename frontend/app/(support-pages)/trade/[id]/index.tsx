@@ -36,6 +36,7 @@ import {
   getTradeById,
 } from "@/config/trades";
 import { getStoredUser } from "@/config/auth";
+import { conditionLabel, formatValuation } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,23 +79,6 @@ function statusConfig(status: string): {
   }
 }
 
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "Brand New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function formatVal(item: TradeItem): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
-    return null;
-  return `₦${Number(v.value_min).toLocaleString()} – ₦${Number(v.value_max).toLocaleString()}`;
-}
-
 // ─── Trade item card ──────────────────────────────────────────────────────────
 
 interface TradeItemCardProps {
@@ -104,8 +88,8 @@ interface TradeItemCardProps {
 
 function TradeItemCard({ item, label }: TradeItemCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatVal(item);
-  const primaryImage = item.primary_image ?? item.images?.[0]?.url ?? null;
+  const valuation = formatValuation(item.valuation);
+  const primaryImage = item.primary_image;
 
   return (
     <View
@@ -142,9 +126,11 @@ function TradeItemCard({ item, label }: TradeItemCardProps) {
           >
             {item.title}
           </Text>
-          <Text style={[styles.tradeItemMeta, { color: theme.textMuted }]}>
-            {conditionLabel(item.condition)}
-          </Text>
+          {item.condition && (
+            <Text style={[styles.tradeItemMeta, { color: theme.textMuted }]}>
+              {conditionLabel(item.condition)}
+            </Text>
+          )}
           {valuation && (
             <View style={styles.valuationRow}>
               <Ionicons name="trending-up" size={11} color={Colors.ai} />

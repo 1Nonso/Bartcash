@@ -263,7 +263,7 @@ export default function ReBargainScreen() {
                     { color: theme.textMuted, fontSize: 14 },
                   ]}
                 >
-                  + ₦{Number(offer.top_up_amount).toLocaleString()} top-up
+                  + ${Number(offer.top_up_amount).toLocaleString()} top-up
                 </Text>
               )}
             </>
@@ -276,7 +276,7 @@ export default function ReBargainScreen() {
           >
             <Ionicons name="sparkles" size={14} color={Colors.ai} />
             <Text style={[styles.aiReferenceText, { color: Colors.ai }]}>
-              Their item's AI value: ₦{theirItemValue.toLocaleString()}
+              Their item's AI value: ${theirItemValue.toLocaleString()}
             </Text>
           </View>
         )}
@@ -391,7 +391,7 @@ export default function ReBargainScreen() {
                   color: theme.textPrimary,
                 },
               ]}
-              placeholder="₦0"
+              placeholder="$0"
               placeholderTextColor={theme.textPlaceholder}
               value={topUp}
               onChangeText={setTopUp}
@@ -424,7 +424,7 @@ export default function ReBargainScreen() {
                 { color: valueDiff >= 0 ? Colors.success : Colors.warning },
               ]}
             >
-              Your offer is ₦{Math.abs(valueDiff).toLocaleString()}{" "}
+              Your offer is ${Math.abs(valueDiff).toLocaleString()}{" "}
               {valueDiff >= 0 ? "above" : "below"} their item's value
             </Text>
           </View>

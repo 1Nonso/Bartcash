@@ -60,8 +60,6 @@ export const Input: React.FC<InputProps> = ({
         ]}
       >
         {leftElement && <View style={styles.leftElement}>{leftElement}</View>}
-    js
-      {trade.status === 'accepted' ? (
         <TextInput
           style={[
             styles.input,
@@ -75,14 +73,6 @@ export const Input: React.FC<InputProps> = ({
           autoCapitalize="none"
           {...props}
         />
-        ) : (
-          <Text style={{ padding: 16, color:
-            Colors.text.placeholder
-          }}
-          >
-            Accept the offer to start chatting
-          </Text>
-        )}
 
         {/* Password toggle */}
         {showPasswordToggle && (

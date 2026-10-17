@@ -63,7 +63,6 @@ export default function ReviewListingScreen() {
   const [publishing, setPublishing] = useState(false);
   const [declaredValue, setDeclaredValue] = useState("");
   const [retrying, setRetrying] = useState(false);
-  const [timeOut, setTimeOut] = useState(false);
 
   const [showValueError, setShowValueError] = useState(false);
   const declaredNum = parseFloat(declaredValue.replace(/,/g, ""));
@@ -131,16 +130,19 @@ export default function ReviewListingScreen() {
         setValuation(v);
         if (v.status !== "pending") {
           stopPolling();
-          setTimeOut(true);
         }
       } catch {
         stopPolling();
       }
     }, POLL_INTERVAL);
 
-    // Safety timeout — stop after 60s regardless
+    // Safety timeout — stop after 60s; if still pending, show it as failed
+    // so the Retry button appears instead of an endless spinner.
     pollTimeoutRef.current = setTimeout(() => {
       stopPolling();
+      setValuation((prev) =>
+        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
+      );
     }, POLL_TIMEOUT_MS);
   }, []);
 
@@ -192,7 +194,7 @@ export default function ReviewListingScreen() {
     setRetrying(true);
     try {
       await retryItemValuation(item.id);
-      setTimeOut(true);
+      setValuation((prev) => (prev ? { ...prev, status: "pending" } : prev));
       startPolling(item.id);
     } catch (err: any) {
       Alert.alert(

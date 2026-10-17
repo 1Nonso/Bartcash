@@ -316,7 +316,6 @@ export default function MyListingsScreen() {
   const handleTabChange = useCallback(
     (tab: FilterTab) => {
       if (tab === activeTab) return;
-      status: tab === "all" ? undefined : tab;
       setActiveTab(tab);
       setSearchQuery("");
       setItems([]);

@@ -18,11 +18,6 @@ import { registerForPushNotifications } from "@/config/notifications";
 import { Colors } from "@/constants";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-// in RootLayout's return
-{
-  /* your existing providers and <Stack /> */
-}
-
 SplashScreen.preventAutoHideAsync();
 
 function navigateFromNotification(data: any) {

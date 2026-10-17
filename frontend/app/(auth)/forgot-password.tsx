@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -38,46 +38,45 @@ export default function ForgotPasswordScreen() {
   const bottomAnim = useAnimatedValue(0);
   const buttonScale = useAnimatedValue(1);
 
-  useRef(
-    (() => {
-      Animated.stagger(80, [
-        Animated.parallel([
-          Animated.spring(headerAnim, {
-            toValue: 1,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-          Animated.spring(headerTranslate, {
-            toValue: 0,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.spring(cardAnim, {
-            toValue: 1,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-          Animated.spring(cardTranslate, {
-            toValue: 0,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.spring(bottomAnim, {
+  // Entrance animation, once on mount (it used to restart on every render).
+  useEffect(() => {
+    Animated.stagger(80, [
+      Animated.parallel([
+        Animated.spring(headerAnim, {
           toValue: 1,
-          tension: 60,
-          friction: 12,
+          tension: 70,
+          friction: 10,
           useNativeDriver: true,
         }),
-      ]).start();
-    })(),
-  ).current;
+        Animated.spring(headerTranslate, {
+          toValue: 0,
+          tension: 70,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(cardAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardTranslate, {
+          toValue: 0,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.spring(bottomAnim, {
+        toValue: 1,
+        tension: 60,
+        friction: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomAnim, cardAnim, cardTranslate, headerAnim, headerTranslate]);
 
   const isValid = EMAIL_REGEX.test(email);
   const emailInvalid = email.length > 0 && !isValid;

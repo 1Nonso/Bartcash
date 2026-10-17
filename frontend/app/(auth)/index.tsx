@@ -5,10 +5,9 @@ import { Image } from "expo-image";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing, Typography } from "@/constants";
-import * as Notifications from "expo-notifications";
 import { hasSession, refreshTokens } from "@/config/auth";
 import {
-  isExpo,
+  Notifications,
   navigateFromNotification,
   registerForPushNotifications,
 } from "@/config/notifications";
@@ -111,7 +110,7 @@ export default function SplashScreenComponent() {
         if (cancelled) return;
         if (destination === "dashboard") {
           router.replace("/(main-pages)/dashboard");
-          if (!isExpo) {
+          if (Notifications) {
             registerForPushNotifications().catch(() => {});
             // App was opened by tapping a notification while it was closed.
             Notifications.getLastNotificationResponseAsync()

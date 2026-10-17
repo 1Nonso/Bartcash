@@ -1,5 +1,4 @@
 import api from "./api";
-import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router } from "expo-router";
@@ -36,7 +35,18 @@ export interface NotificationsResponse {
 export const isExpo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-if (!isExpo) {
+type NotificationsModule = typeof import("expo-notifications");
+
+/**
+ * expo-notifications, or null in Expo Go. Android Expo Go (SDK 53+) throws
+ * on import, so the module is loaded only outside Expo Go. Import this
+ * instead of "expo-notifications".
+ */
+export const Notifications: NotificationsModule | null = isExpo
+  ? null
+  : require("expo-notifications");
+
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -70,7 +80,7 @@ export function navigateFromNotification(data: any) {
 }
 
 export async function registerForPushNotifications(): Promise<void> {
-  if (isExpo) return;
+  if (!Notifications) return;
   if (!Device.isDevice) return; // simulators/emulators have no push token
 
   const { status: existing } = await Notifications.getPermissionsAsync();

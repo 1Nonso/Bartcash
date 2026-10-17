@@ -8,9 +8,11 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import * as SplashScreen from "expo-splash-screen";
-import * as Notifications from "expo-notifications";
 import Toast from "react-native-toast-message";
-import { isExpo, navigateFromNotification } from "@/config/notifications";
+import {
+  Notifications,
+  navigateFromNotification,
+} from "@/config/notifications";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -25,7 +27,7 @@ export default function RootLayout() {
   // Tap on a notification while the app is running or backgrounded.
   // Push notifications are not available in Expo Go.
   useEffect(() => {
-    if (isExpo) return;
+    if (!Notifications) return;
     const sub = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         navigateFromNotification(response.notification.request.content.data);

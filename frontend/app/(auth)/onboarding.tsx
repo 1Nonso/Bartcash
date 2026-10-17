@@ -14,6 +14,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { router, useFocusEffect } from "expo-router";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { markOnboardingSeen } from "@/config/onboarding";
 import { Spacing, Radius, Typography, Layout, FontSize } from "@/constants";
 
 const { width: SW, height: SH } = Dimensions.get("window");
@@ -204,6 +205,7 @@ export default function OnboardingScreen() {
     if (activeIndex < SLIDES.length - 1) {
       goTo(activeIndex + 1);
     } else {
+      markOnboardingSeen();
       router.replace("/(auth)/sign-up");
     }
   };
@@ -213,6 +215,7 @@ export default function OnboardingScreen() {
   };
 
   const handleSkip = () => {
+    markOnboardingSeen();
     router.replace("/(auth)/sign-in");
   };
 

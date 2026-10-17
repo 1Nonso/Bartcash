@@ -5,10 +5,24 @@ import { Image } from "expo-image";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing, Typography } from "@/constants";
+import * as Notifications from "expo-notifications";
 import { hasSession, refreshTokens } from "@/config/auth";
+import {
+  isExpo,
+  navigateFromNotification,
+  registerForPushNotifications,
+} from "@/config/notifications";
+import { shouldShowOnboarding } from "@/config/onboarding";
 
 import darkLogo from "@/assets/images/bartcash-logo-dark.svg";
 import lightLogo from "@/assets/images/bartcash-logo-white.svg";
+
+/** Minimum time the splash stays up, so the animation can be seen. */
+const SPLASH_MIN_MS = 6000;
+
+type Destination = "dashboard" | "onboarding" | "sign-in";
+
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export default function SplashScreenComponent() {
   const theme = useAuthTheme();
@@ -19,29 +33,15 @@ export default function SplashScreenComponent() {
   const ringScale = useAnimatedValue(0.4);
   const ringOpacity = useAnimatedValue(0.6);
 
-  const checkSession = async () => {
+  // Where to go after the splash. Never throws; falls back to sign-in or
+  // onboarding when the session can't be restored.
+  const resolveDestination = async (): Promise<Destination> => {
     try {
-      const sessionExists = await hasSession();
-
-      if (sessionExists) {
-        // A refresh token exists — try to get a fresh access token
-        const refreshed = await refreshTokens();
-
-        if (refreshed) {
-          // Session restored — go to main app
-          router.replace("/(main-pages)/dashboard");
-        } else {
-          // Refresh token was expired or revoked — go to login
-          router.replace("/onboarding");
-        }
-      } else {
-        // No session at all — first time user or logged out
-        router.replace("/onboarding");
-      }
+      if ((await hasSession()) && (await refreshTokens())) return "dashboard";
     } catch {
-      // Something went wrong — safe fallback to onboarding
-      router.replace("/onboarding");
+      // fall through to the signed-out routes
     }
+    return (await shouldShowOnboarding()) ? "onboarding" : "sign-in";
   };
 
   useEffect(() => {
@@ -103,9 +103,37 @@ export default function SplashScreenComponent() {
       ]),
     ).start();
 
-    // Check session after animation has had time to show
-    const timer = setTimeout(checkSession, 3500);
-    return () => clearTimeout(timer);
+    // Check the session while the animation plays; leave once both the
+    // check and the minimum display time are done.
+    let cancelled = false;
+    Promise.all([resolveDestination(), wait(SPLASH_MIN_MS)]).then(
+      ([destination]) => {
+        if (cancelled) return;
+        if (destination === "dashboard") {
+          router.replace("/(main-pages)/dashboard");
+          if (!isExpo) {
+            registerForPushNotifications().catch(() => {});
+            // App was opened by tapping a notification while it was closed.
+            Notifications.getLastNotificationResponseAsync()
+              .then((response) => {
+                if (response) {
+                  navigateFromNotification(
+                    response.notification.request.content.data,
+                  );
+                }
+              })
+              .catch(() => {});
+          }
+        } else if (destination === "onboarding") {
+          router.replace("/(auth)/onboarding");
+        } else {
+          router.replace("/(auth)/sign-in");
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [logoOpacity, logoScale, ringOpacity, ringScale, taglineOpacity]);
 
   const logo = theme.isDark ? lightLogo : darkLogo;

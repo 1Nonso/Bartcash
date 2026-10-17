@@ -2,6 +2,7 @@ import api from "./api";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import { router } from "expo-router";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,26 @@ if (!isExpo) {
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
+/** Open the screen a push notification points at (trade or dispute). */
+export function navigateFromNotification(data: any) {
+  const referenceType = data?.reference_type;
+  const referenceId = data?.reference_id;
+  if (!referenceType || !referenceId) return;
+
+  if (referenceType === "Trade") {
+    router.push({
+      pathname: "/(support-pages)/trade/[id]",
+      params: { id: referenceId },
+    });
+  } else if (referenceType === "Dispute") {
+    // TODO: point at the dispute detail screen once dispute.tsx exists
+    router.push({
+      pathname: "/(support-pages)/trade/[id]",
+      params: { id: referenceId },
+    });
+  }
+}
+
 export async function registerForPushNotifications(): Promise<void> {
   if (isExpo) return;
   if (!Device.isDevice) return; // simulators/emulators have no push token

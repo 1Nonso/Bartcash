@@ -114,12 +114,12 @@ test('Reasons by tier and want rank', () => {
    assert.equal(templateReason(s, cand(ELEC, { tier: 3 })), 'Recently listed');
 });
 
-test('rankMatches: score desc, then newest; R lifts a mutual want', () => {
+test('rankMatches: score desc, then newest; unknown R is neutral 0.5', () => {
    const s = source();
    const a = cand(BOOK, { userId: 'ua' }); // W .85, R 1 -> .9
    const b = cand(FASH, { userId: 'ub' }); // W 1, R .2 -> .733
-   const c = cand(FASH, { userId: 'uc' }); // W 1, R null -> 1
-   const d = cand(BOOK, { userId: 'ud' }); // W .85, R null -> .85 (newer than a)
+   const c = cand(FASH, { userId: 'uc' }); // W 1, R null (0.5) -> .833
+   const d = cand(BOOK, { userId: 'ud' }); // W .85, R null (0.5) -> .733 (newer than b)
    const owners = new Map([
       ['ua', new Map([[ELEC, 1]])],
       ['ub', new Map([[SPORT, 1]])],
@@ -128,14 +128,16 @@ test('rankMatches: score desc, then newest; R lifts a mutual want', () => {
    assert.deepEqual(
       r.map((m) => [m.candidateItemId, m.score]),
       [
-         [c.id, 1],
          [a.id, 0.9],
-         [d.id, 0.85],
+         [c.id, 0.833],
+         [d.id, 0.733],
          [b.id, 0.733],
       ],
    );
    assert.deepEqual(r.map((m) => m.rank), [1, 2, 3, 4]);
    assert.ok(r.every((m) => m.source === 'fallback' && m.tasteAffinity === null));
+   // Stored R stays null for unknown owners.
+   assert.equal(r.find((m) => m.candidateItemId === c.id)!.reciprocalFit, null);
 });
 
 test('rankMatches: equal scores order newest first', () => {

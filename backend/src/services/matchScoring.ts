@@ -13,6 +13,9 @@ export const WANT_RANK_FIT: Record<number, number> = { 1: 1.0, 2: 0.85, 3: 0.7 }
 export const SUGGESTED_FIT = 0.4;
 export const OTHER_FIT = 0.2;
 export const NOTE_BONUS = 0.1;
+/** R used for scoring when the other owner has no wants: neutral, so an
+ *  unknown owner never outranks one who wants the source item. Stored as null. */
+export const RECIPROCAL_UNKNOWN = 0.5;
 
 export const STRONG_AT = 0.7;
 export const GOOD_AT = 0.5;
@@ -172,7 +175,10 @@ export function rankMatches(
       const r = noWants ? null : reciprocalFit(source.categoryId, ownerWants.get(c.userId));
       const score = noWants
          ? 0
-         : combine({ wants: w, taste: null, reciprocal: r, owner: null }, weights);
+         : combine(
+              { wants: w, taste: null, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
+              weights,
+           );
       return { c, w, r, score };
    });
 

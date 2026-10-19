@@ -306,17 +306,6 @@ export async function create(
             }
          }
 
-         await tx.item.updateMany({
-            where: {
-               id: {
-                  in: itemIdsToLock,
-               },
-            },
-            data: {
-               status: 'in_trade',
-            },
-         });
-
          const { count } =
             await tx.item.updateMany({
                where: {
@@ -335,7 +324,7 @@ export async function create(
          )
             throw createHttpError(
                422,
-               'One or more items are longer available.',
+               'One or more items are no longer available.',
             );
 
          await tx.tradeOffer.create({

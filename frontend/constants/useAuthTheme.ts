@@ -55,6 +55,9 @@ export function useAuthTheme() {
     error: Colors.danger,
     errorBg: isDark ? "#2D1A1A" : Colors.dangerLight,
     success: Colors.success,
+    successLight: isDark ? "#1F3320" : Colors.successLight,
+    info: isDark ? "#8C9EFF" : Colors.info,
+    infoLight: isDark ? "#1E2347" : Colors.infoLight,
     link: isDark ? "#A78BFA" : Colors.text.link,
   };
 }

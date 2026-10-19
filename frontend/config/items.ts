@@ -51,6 +51,15 @@ export interface GetItemsParams {
   value_max?: number;
 }
 
+/** GET /items/mine?include=match_summary (available items, flag on). */
+export interface MatchSummary {
+  count: number;
+  top_label: ScoreLabelValue | null;
+  status: "ready" | "refreshing";
+}
+
+export type ScoreLabelValue = "strong" | "good" | "possible";
+
 export interface MyItem {
   id: string;
   title: string;
@@ -60,7 +69,25 @@ export interface MyItem {
   location: string | null;
   primary_image: any | null;
   valuation: ItemValuation | null;
+  match_summary?: MatchSummary | null;
   created_at: string;
+}
+
+// ─── Match context (API §16.3), on GET /items/{id}?context_item_id= ─────────
+
+export type CheckResult = "strong" | "partial" | "none" | "unknown";
+
+export interface MatchContext {
+  score_label: ScoreLabelValue | null;
+  reason: string;
+  checked: {
+    key: "wants_fit" | "taste_fit" | "reciprocal_fit" | "shared_interests";
+    label: string;
+    result: CheckResult;
+  }[];
+  shared_interests: unknown[];
+  shared_tags: { tag_id: string; name: string }[];
+  source: "qloo" | "fallback";
 }
 
 // ─── Image types ──────────────────────────────────────────────────────────────
@@ -107,6 +134,9 @@ export interface ItemDetail {
   images: ItemImage[];
   valuation: ItemValuationDetail | null;
   owner: ItemOwnerDetail;
+  /** Flag on only: ranked wants and, with a context listing, why it matches. */
+  wants?: { rank: number; category: Category }[];
+  match_context?: MatchContext | null;
   created_at: string;
 }
 
@@ -158,8 +188,13 @@ export async function getMarketplaceItems(
  * Fetch full detail for a single item.
  * GET /items/{id}
  */
-export async function getItemById(id: string): Promise<ItemDetail> {
-  const response = await api.get(`/items/${id}`);
+export async function getItemById(
+  id: string,
+  contextItemId?: string,
+): Promise<ItemDetail> {
+  const response = await api.get(`/items/${id}`, {
+    params: contextItemId ? { context_item_id: contextItemId } : undefined,
+  });
   return response.data.data.item;
 }
 

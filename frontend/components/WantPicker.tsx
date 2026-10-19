@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Category, getCategories } from "@/config/items";
+import { ScoutBadge } from "@/components/scout";
 import {
   WantSuggestion,
   WantSuggestionsData,
@@ -306,10 +307,7 @@ export default function WantPicker({
 
       {state === "ready" &&
         (isScout ? (
-          <View style={[styles.scoutBadge, { backgroundColor: theme.aiLight }]}>
-            <Ionicons name="sparkles" size={12} color={theme.ai} />
-            <Text style={[styles.scoutBadgeText, { color: theme.ai }]}>Scout</Text>
-          </View>
+          <ScoutBadge style={styles.scoutBadge} />
         ) : (
           <Text style={[styles.popular, { color: theme.textMuted }]}>
             Popular choices
@@ -426,17 +424,7 @@ const styles = StyleSheet.create({
   sub: { ...Typography.caption, flex: 1 },
   count: { ...Typography.captionMedium },
 
-  scoutBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 4,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing[2],
-    paddingVertical: 2,
-    marginBottom: Spacing[2],
-  },
-  scoutBadgeText: { fontSize: 12, fontWeight: "600" },
+  scoutBadge: { marginBottom: Spacing[2] },
   popular: { ...Typography.captionMedium, marginBottom: Spacing[2] },
 
   cards: { gap: Spacing[2] },

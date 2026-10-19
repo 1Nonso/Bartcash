@@ -27,6 +27,10 @@ import { randomUUID } from 'node:crypto';
 import { isQlooEnabled } from '../config/features.config';
 import { queueMatchRefresh } from '../services/matchRefresh.service';
 import {
+   getMatchContext,
+   getMatchSummaries,
+} from '../services/matchContext.service';
+import {
    formatOwner,
    formatValuation,
 } from '../utils/itemFormat';
@@ -852,6 +856,15 @@ export async function mine(
            )
          : null;
 
+   // include=match_summary (Phase 4b, Section 16.8), flag on only.
+   const summaries =
+      isQlooEnabled() &&
+      String(req.query.include ?? '')
+         .split(',')
+         .includes('match_summary')
+         ? await getMatchSummaries(page, userId)
+         : null;
+
    const formatted = page.map(
       (item) => ({
          id: item.id,
@@ -874,6 +887,14 @@ export async function mine(
          valuation: formatValuation(
             item.valuation,
          ),
+         ...(summaries &&
+         item.status === 'available'
+            ? {
+                 match_summary:
+                    summaries.get(item.id) ??
+                    null,
+              }
+            : {}),
          created_at: item.createdAt,
       }),
    );
@@ -913,6 +934,20 @@ export async function show(
             valuation: true,
             user: true,
             category: true,
+            wants: {
+               orderBy: { rank: 'asc' },
+               select: {
+                  rank: true,
+                  category: {
+                     select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                        icon: true,
+                     },
+                  },
+               },
+            },
          },
       },
    );
@@ -942,6 +977,18 @@ export async function show(
                'Item not found',
          });
    }
+
+   // Ranked wants and match context (Phase 4b, Section 16.8), flag on only.
+   const qloo = isQlooEnabled();
+   const matchContext = qloo
+      ? await getMatchContext(
+           req.query.context_item_id as
+              | string
+              | undefined,
+           req.userId,
+           item,
+        )
+      : null;
 
    return res
       .status(StatusCodes.OK)
@@ -989,6 +1036,13 @@ export async function show(
                   item.user,
                   { extended: true },
                ),
+               ...(qloo
+                  ? {
+                       wants: item.wants,
+                       match_context:
+                          matchContext,
+                    }
+                  : {}),
                created_at:
                   item.createdAt,
             },

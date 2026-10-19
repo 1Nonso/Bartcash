@@ -27,6 +27,9 @@ import {
   publishItem,
 } from "@/config/items";
 import { goBack } from "@/hooks/navigation";
+import { useFeatures } from "@/hooks/useFeatures";
+import { apiErrorMessage, setWants } from "@/config/wants";
+import WantPicker from "@/components/WantPicker";
 
 const POLL_INTERVAL = 5000;
 const POLL_TIMEOUT_MS = 60000; // Stop polling after 60s
@@ -64,6 +67,14 @@ export default function ReviewListingScreen() {
   const [publishing, setPublishing] = useState(false);
   const [declaredValue, setDeclaredValue] = useState("");
   const [retrying, setRetrying] = useState(false);
+
+  // Wants (Qloo, UI §13.8). With the flag off the screen is unchanged.
+  const { qloo } = useFeatures();
+  const [picked, setPicked] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [showPickError, setShowPickError] = useState(false);
+  // Last wants sent, so a publish retry does not resend unchanged wants.
+  const savedWantsRef = useRef<string | null>(null);
 
   const [showValueError, setShowValueError] = useState(false);
   const declaredNum = parseFloat(declaredValue.replace(/,/g, ""));
@@ -133,6 +144,7 @@ export default function ReviewListingScreen() {
         const data = await getItemById(id);
         setItem(data);
         setValuation(data.valuation);
+        setNote(data.desired_trade ?? "");
 
         if (data.valuation?.status === "pending") {
           startPolling(id);
@@ -161,13 +173,31 @@ export default function ReviewListingScreen() {
   // ── Publish ──────────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
     if (!item) return;
-    if (!declaredValid) {
-      setShowValueError(true);
+    const needsPick = qloo && picked.length === 0;
+    if (!declaredValid || needsPick) {
+      setShowValueError(!declaredValid);
+      setShowPickError(needsPick);
       return;
     }
 
     setPublishing(true);
     try {
+      if (qloo) {
+        const trimmed = note.trim();
+        const signature = JSON.stringify([picked, trimmed]);
+        if (savedWantsRef.current !== signature) {
+          try {
+            await setWants(item.id, picked, trimmed || null);
+          } catch (err: any) {
+            Alert.alert(
+              "Error",
+              apiErrorMessage(err, "Could not save your choices. Please try again."),
+            );
+            return;
+          }
+          savedWantsRef.current = signature;
+        }
+      }
       await publishItem(item.id, declaredNum);
       router.replace({
         pathname: "/(support-pages)/listing/[id]",
@@ -181,7 +211,7 @@ export default function ReviewListingScreen() {
     } finally {
       setPublishing(false);
     }
-  }, [item, declaredValid, declaredNum]);
+  }, [item, declaredValid, declaredNum, qloo, picked, note]);
 
   const handleEditDetails = useCallback(() => {
     router.push({
@@ -439,6 +469,20 @@ export default function ReviewListingScreen() {
       >
         {renderValuation()}
 
+        {qloo && (
+          <WantPicker
+            itemId={item.id}
+            picked={picked}
+            onChangePicked={(ids) => {
+              setPicked(ids);
+              if (ids.length > 0) setShowPickError(false);
+            }}
+            note={note}
+            onChangeNote={setNote}
+            showPickError={showPickError}
+          />
+        )}
+
         {/* Images preview */}
         <View
           style={[
@@ -505,7 +549,7 @@ export default function ReviewListingScreen() {
               </>
             )}
 
-            {item.desired_trade && (
+            {!qloo && item.desired_trade && (
               <>
                 <View
                   style={[

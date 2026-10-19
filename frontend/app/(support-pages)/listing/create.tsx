@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
+import { useFeatures } from "@/hooks/useFeatures";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -101,6 +102,10 @@ export default function CreateListingScreen() {
   const [condition, setCondition] = useState<Condition | null>(null);
   const [description, setDescription] = useState("");
   const [desiredTrade, setDesiredTrade] = useState("");
+  // With Qloo on, "what I'm looking for" moves to Review as wants and a
+  // note (UI §13.9), so the field is hidden and not sent.
+  const { qloo, loading: featuresLoading } = useFeatures();
+  const showDesiredTrade = !featuresLoading && !qloo;
   const [location, setLocation] = useState("");
 
   // UI state
@@ -207,7 +212,9 @@ export default function CreateListingScreen() {
         description: description.trim(),
         category_id: selectedCategory!,
         condition: condition!,
-        desired_trade: desiredTrade.trim() || undefined,
+        desired_trade: showDesiredTrade
+          ? desiredTrade.trim() || undefined
+          : undefined,
         location: location.trim() || undefined,
       };
       const created = await createItem(payload, images);
@@ -258,6 +265,7 @@ export default function CreateListingScreen() {
     selectedCategory,
     condition,
     desiredTrade,
+    showDesiredTrade,
     location,
     images,
   ]);
@@ -687,62 +695,66 @@ export default function CreateListingScreen() {
               <Text style={styles.errorText}>{errors.description}</Text>
             )}
 
-            {/* What I'm looking for */}
-            <Text
-              style={[
-                styles.fieldLabel,
-                { color: theme.textPrimary, marginTop: Spacing[4] },
-              ]}
-            >
-              What I{"'"}m looking for
-            </Text>
-            <TextInput
-              style={[
-                styles.textarea,
-                {
-                  backgroundColor: tradeFocused
-                    ? theme.inputBgFocused
-                    : theme.inputBg,
-                  borderColor: tradeFocused
-                    ? theme.borderFocus
-                    : theme.borderDefault,
-                  color: theme.textPrimary,
-                },
-              ]}
-              placeholder="What would you like to trade for? Be specific or keep it open..."
-              placeholderTextColor={theme.textPlaceholder}
-              value={desiredTrade}
-              onChangeText={setDesiredTrade}
-              onFocus={() => setTradeFocused(true)}
-              onBlur={() => setTradeFocused(false)}
-              multiline
-              maxLength={500}
-              textAlignVertical="top"
-            />
-            <Text style={[styles.charCount, { color: theme.textMuted }]}>
-              {desiredTrade.length}/500 characters
-            </Text>
+            {showDesiredTrade && (
+              <>
+                {/* What I'm looking for */}
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.textPrimary, marginTop: Spacing[4] },
+                  ]}
+                >
+                  What I{"'"}m looking for
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textarea,
+                    {
+                      backgroundColor: tradeFocused
+                        ? theme.inputBgFocused
+                        : theme.inputBg,
+                      borderColor: tradeFocused
+                        ? theme.borderFocus
+                        : theme.borderDefault,
+                      color: theme.textPrimary,
+                    },
+                  ]}
+                  placeholder="What would you like to trade for? Be specific or keep it open..."
+                  placeholderTextColor={theme.textPlaceholder}
+                  value={desiredTrade}
+                  onChangeText={setDesiredTrade}
+                  onFocus={() => setTradeFocused(true)}
+                  onBlur={() => setTradeFocused(false)}
+                  multiline
+                  maxLength={500}
+                  textAlignVertical="top"
+                />
+                <Text style={[styles.charCount, { color: theme.textMuted }]}>
+                  {desiredTrade.length}/500 characters
+                </Text>
 
-            {/* Pro tip */}
-            <View
-              style={[
-                styles.proTip,
-                {
-                  backgroundColor: Colors.aiSurface,
-                  borderColor: Colors.aiLight,
-                },
-              ]}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={14}
-                color={Colors.ai}
-              />
-              <Text style={[styles.proTipText, { color: Colors.ai }]}>
-                Pro tip: Being specific about what you want increases your match
-                quality
-              </Text>
-            </View>
+                {/* Pro tip */}
+                <View
+                  style={[
+                    styles.proTip,
+                    {
+                      backgroundColor: Colors.aiSurface,
+                      borderColor: Colors.aiLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={14}
+                    color={Colors.ai}
+                  />
+                  <Text style={[styles.proTipText, { color: Colors.ai }]}>
+                    Pro tip: Being specific about what you want increases your match
+                    quality
+                  </Text>
+                </View>
+              </>
+            )}
           </SectionCard>
 
           {/* ── Location ── */}

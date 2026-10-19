@@ -24,6 +24,10 @@ export async function startQueue(): Promise<PgBoss> {
       await boss.createQueue(
          QUEUES.ITEM_VALUATION,
       );
+      await boss.createQueue(
+         QUEUES.ITEM_TASTE,
+         { policy: 'short' },
+      );
       started = true;
    }
    return boss;

@@ -24,7 +24,13 @@ import {
    encodeCursor,
 } from '../utils/cursor';
 import { randomUUID } from 'node:crypto';
-import { success, z } from 'zod';
+import { isQlooEnabled } from '../config/features.config';
+import {
+   ensureItemTaste,
+   queueItemTaste,
+   requestItemTaste,
+} from '../services/itemTaste.service';
+import z from 'zod';
 
 const IMAGE_LIMIT = 6;
 
@@ -165,10 +171,12 @@ export async function create(
    }
 
    const itemId = randomUUID();
+
    const uploaded: {
       key: string;
       url: string;
    }[] = [];
+
    try {
       for (const [i, file] of files
          .slice(0, IMAGE_LIMIT)
@@ -183,6 +191,7 @@ export async function create(
             ),
          });
       }
+
       const { item, valuation } =
          await db.$transaction(
             async (tx) => {
@@ -243,12 +252,24 @@ export async function create(
                         },
                      },
                   );
+               if (isQlooEnabled()) {
+                  await tx.itemTaste.create(
+                     {
+                        data: {
+                           itemId,
+                           status:
+                              'pending',
+                        },
+                     },
+                  );
+               }
                return {
                   item,
                   valuation,
                };
             },
          );
+
       try {
          await enqueueItemValuation({
             itemId,
@@ -264,6 +285,9 @@ export async function create(
             }, // user can hit Retry
          });
       }
+
+      await queueItemTaste(itemId);
+
       return res
          .status(StatusCodes.CREATED)
          .json({
@@ -362,6 +386,9 @@ export async function publish(
          },
       },
    );
+
+   await ensureItemTaste(id);
+
    const warning =
       checkDeclaredValueOutlier(
          parsed.data
@@ -1127,6 +1154,16 @@ export async function update(
       await enqueueItemValuation({
          itemId: id,
          valuationId: valuation.id,
+      });
+   }
+
+   if (
+      titleChanged ||
+      descriptionChanged ||
+      categoryChanged
+   ) {
+      await requestItemTaste(id, {
+         reset: true,
       });
    }
 

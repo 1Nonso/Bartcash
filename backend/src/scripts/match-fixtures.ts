@@ -6,8 +6,13 @@
 import assert from 'node:assert/strict';
 import { DEFAULT_MATCH_WEIGHTS, parseMatchWeights } from '../config/match.config';
 import {
+   buildExplanation,
+   checkResult,
    combine,
    keywords,
+   pickTasteEntities,
+   sharedTags,
+   tasteScores,
    ladderLevel,
    MAX_MATCHES,
    rankMatches,
@@ -164,6 +169,83 @@ test('Level 3 (no wants): recency only, no W/R, score 0', () => {
    assert.equal(ladderLevel(s, 2), 3);
    assert.equal(ladderLevel(source(), 2), 2);
    assert.equal(ladderLevel(source(), 0), 4);
+});
+
+test('pickTasteEntities: distinct, in order, signals skipped, capped', () => {
+   const list = [
+      cand(FASH, { entityId: 'E1' }),
+      cand(FASH, { entityId: 'S' }),
+      cand(FASH, { entityId: 'E1' }),
+      cand(FASH, { entityId: null }),
+      cand(FASH, { entityId: 'E2' }),
+   ];
+   assert.deepEqual(pickTasteEntities(list, new Set(['S'])), ['E1', 'E2']);
+   assert.deepEqual(pickTasteEntities(list, new Set(['S']), 1), ['E1']);
+});
+
+test('tasteScores: rescaled within the set; signal brand 1; missing null', () => {
+   const a = cand(FASH, { entityId: 'A' });
+   const b = cand(FASH, { entityId: 'B' });
+   const c = cand(FASH, { entityId: 'C' });
+   const same = cand(FASH, { entityId: 'S' });
+   const none = cand(FASH, { entityId: null });
+   const lost = cand(FASH, { entityId: 'Z' });
+   const t = tasteScores([a, b, c, same, none, lost], new Set(['S']), new Map([['A', 0.9], ['B', 0.6], ['C', 0.7]]));
+   assert.deepEqual([...t.values()], [1, 0, 0.333, 1, null, null]);
+   // All equal -> 1.00.
+   const eq = tasteScores([a, b], new Set(), new Map([['A', 0.5], ['B', 0.5]]));
+   assert.deepEqual([...eq.values()], [1, 1]);
+});
+
+test('rankMatches with T: weights renormalised, source qloo, taste clause', () => {
+   const s = source({ entityName: 'Sony' });
+   const hi = cand(FASH, { userId: 'u1' }); // W 1, T 1, R .5 -> (0.4+0.3+0.1)/0.9 = .889
+   const lo = cand(FASH, { userId: 'u2' }); // W 1, T 0, R .5 -> 0.5/0.9 = .556
+   const nt = cand(FASH, { userId: 'u3' }); // W 1, T null, R .5 -> .833
+   const r = rankMatches(s, [hi, lo, nt], new Map(), W, new Map([[hi.id, 1], [lo.id, 0], [nt.id, null]]));
+   assert.deepEqual(r.map((m) => [m.candidateItemId, m.score, m.source]), [
+      [hi.id, 0.889, 'qloo'],
+      [nt.id, 0.833, 'fallback'],
+      [lo.id, 0.556, 'qloo'],
+   ]);
+   assert.equal(r[0]!.reason, 'Matches your top want: Fashion · popular with Sony fans');
+   assert.equal(r[2]!.reason, 'Matches your top want: Fashion');
+   // No brand on the source: no clause even with a high T.
+   const plain = rankMatches(source(), [hi], new Map(), W, new Map([[hi.id, 1]]));
+   assert.equal(plain[0]!.reason, 'Matches your top want: Fashion');
+});
+
+test('Explanation: checked results, shared tags, label and source', () => {
+   assert.deepEqual([0.7, 0.4, 0.39, null].map(checkResult), ['strong', 'partial', 'none', 'unknown']);
+   const g = (s: string) => ({ tag_id: `urn:tag:genre:brand:${s}`, name: s });
+   const look = { tag_id: 'urn:tag:aesthetic_property:qloo:sleek', name: 'Sleek' };
+   const b2c = { tag_id: 'urn:tag:business_model:qloo:b2c', name: 'B2C' };
+   const tags = sharedTags([look, g('one'), b2c, g('two')], [g('two'), b2c, look, g('three')]);
+   // Shared only, noise types dropped, genre first.
+   assert.deepEqual(tags, [g('two'), look]);
+   const many = Array.from({ length: 9 }, (_, i) => g(`t${i}`));
+   assert.equal(sharedTags(many, many).length, 6);
+   const e = buildExplanation({ score: 0.889, tier: 1, reason: 'r', wants: 1, taste: 0.5, reciprocal: null, tags });
+   assert.equal(e.score_label, 'strong');
+   assert.equal(e.source, 'qloo');
+   assert.deepEqual(e.checked.map((c) => [c.key, c.result]), [
+      ['wants_fit', 'strong'],
+      ['taste_fit', 'partial'],
+      ['reciprocal_fit', 'unknown'],
+      ['shared_interests', 'unknown'],
+   ]);
+   assert.equal(buildExplanation({ score: 0, tier: 3, reason: 'r', wants: null, taste: null, reciprocal: null, tags: [] }).score_label, null);
+});
+
+test('rankMatches stores the explanation on every row', () => {
+   const r = rankMatches(source(), [cand(FASH), cand(SPORT, { tier: 2 })], new Map(), W);
+   assert.ok(r.every((m) => m.explanation.reason === m.reason && m.explanation.source === 'fallback'));
+   assert.equal(r[0]!.explanation.score_label, 'strong');
+});
+
+test('ladderLevel 1 when T was used', () => {
+   assert.equal(ladderLevel(source(), 3, true), 1);
+   assert.equal(ladderLevel(source(), 3, false), 2);
 });
 
 test('MATCH_WEIGHTS parsing', () => {

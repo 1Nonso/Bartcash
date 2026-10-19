@@ -1,15 +1,20 @@
-// The match-refresh job (FLOW §10.11): rank the source item's matches and
-// replace its match_results rows in one transaction. Taste (T) and owner
-// compatibility (O) are not computed yet, so every row is source fallback.
+// The match-refresh job (FLOW §10.11): rank the source item's matches (with
+// taste T from one Qloo call) and replace its match_results rows in one
+// transaction. Owner compatibility (O) is not computed yet.
 
 import { db } from '../config/db.config';
+import type { Prisma } from '../generated/prisma/client';
 import { computeMatches } from './matchCandidates.service';
+import { defaultMatchQloo, type MatchQloo } from './matchTaste.service';
 
 export type MatchRefreshResult =
    | { outcome: 'cleared' }
-   | { outcome: 'refreshed'; count: number; level: 2 | 3 | 4 };
+   | { outcome: 'refreshed'; count: number; level: 1 | 2 | 3 | 4; taste: string };
 
-export async function runMatchRefresh(itemId: string): Promise<MatchRefreshResult> {
+export async function runMatchRefresh(
+   itemId: string,
+   qloo: MatchQloo | null = null,
+): Promise<MatchRefreshResult> {
    const source = await db.item.findUnique({
       where: { id: itemId },
       select: {
@@ -28,7 +33,9 @@ export async function runMatchRefresh(itemId: string): Promise<MatchRefreshResul
       return { outcome: 'cleared' };
    }
 
-   const { rows, level } = await computeMatches(source);
+   const { rows, level, taste } = await computeMatches(source, {
+      qloo: qloo ?? (await defaultMatchQloo()),
+   });
    const computedAt = new Date();
 
    await db.$transaction(async (tx) => {
@@ -47,10 +54,11 @@ export async function runMatchRefresh(itemId: string): Promise<MatchRefreshResul
             poolTier: r.poolTier,
             source: r.source,
             reason: r.reason,
+            explanation: r.explanation as unknown as Prisma.InputJsonValue,
             computedAt,
          })),
       });
    });
 
-   return { outcome: 'refreshed', count: rows.length, level };
+   return { outcome: 'refreshed', count: rows.length, level, taste };
 }

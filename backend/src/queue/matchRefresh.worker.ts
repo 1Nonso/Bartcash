@@ -22,7 +22,7 @@ export async function registerMatchRefreshWorker() {
          console.log(
             r.outcome === 'cleared'
                ? `match-refresh: item ${itemId} cleared (not available)`
-               : `match-refresh: item ${itemId} refreshed rows=${r.count} level=${r.level}`,
+               : `match-refresh: item ${itemId} refreshed rows=${r.count} level=${r.level} taste=${r.taste}`,
          );
       },
    );

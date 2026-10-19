@@ -20,6 +20,19 @@ export const RECIPROCAL_UNKNOWN = 0.5;
 export const STRONG_AT = 0.7;
 export const GOOD_AT = 0.5;
 
+/** Candidate brands sent to Qloo in the one insights call. */
+export const MAX_TASTE_ENTITIES = 50;
+/** T at or above this adds the taste clause to the reason. */
+export const TASTE_REASON_AT = 0.7;
+export const REASON_MAX = 140;
+export const SHARED_TAGS_MAX = 6;
+
+/** { tag_id, name } as stored on item_tastes.tags. */
+export interface TagRef {
+   tag_id: string;
+   name: string;
+}
+
 export type PoolTier = 1 | 2 | 3;
 export type ScoreLabel = 'strong' | 'good' | 'possible';
 
@@ -33,6 +46,9 @@ export interface SourceInput {
    note: string | null;
    /** Category names, for the reason line. */
    categoryNames: Map<string, string>;
+   /** The listing's resolved Qloo brand, when there is one. */
+   entityName?: string | null;
+   tags?: TagRef[];
 }
 
 export interface CandidateInput {
@@ -42,6 +58,9 @@ export interface CandidateInput {
    title: string;
    createdAt: Date;
    tier: PoolTier;
+   /** The candidate's resolved Qloo brand, when there is one. */
+   entityId?: string | null;
+   tags?: TagRef[];
 }
 
 /** Wants on the candidate owner's available items: categoryId → best rank. */
@@ -58,6 +77,20 @@ export interface ScoredMatch {
    poolTier: PoolTier;
    source: 'qloo' | 'fallback';
    reason: string;
+   explanation: MatchExplanation;
+}
+
+export type CheckResult = 'strong' | 'partial' | 'none' | 'unknown';
+export type CheckKey = 'wants_fit' | 'taste_fit' | 'reciprocal_fit' | 'shared_interests';
+
+/** Stored on match_results.explanation; read back as match_context (API §16.3). */
+export interface MatchExplanation {
+   score_label: ScoreLabel | null;
+   reason: string;
+   checked: { key: CheckKey; label: string; result: CheckResult }[];
+   shared_interests: unknown[];
+   shared_tags: TagRef[];
+   source: 'qloo' | 'fallback';
 }
 
 const STOP_WORDS = new Set([
@@ -139,47 +172,168 @@ export function scoreLabel(score: number, tier: PoolTier): ScoreLabel | null {
    return 'possible';
 }
 
-/** Template reason (Groq reasons for the top 10 come later). */
-export function templateReason(source: SourceInput, c: CandidateInput): string {
+/** Template reason (Groq reasons are deferred). A strong T adds a taste clause. */
+export function templateReason(
+   source: SourceInput,
+   c: CandidateInput,
+   taste: number | null = null,
+): string {
    const name = source.categoryNames.get(c.categoryId) ?? 'this category';
-   if (c.tier === 1) {
-      return source.wantRanks.get(c.categoryId) === 1
-         ? `Matches your top want: ${name}`
-         : `Matches your want: ${name}`;
+   let base =
+      c.tier === 1
+         ? source.wantRanks.get(c.categoryId) === 1
+            ? `Matches your top want: ${name}`
+            : `Matches your want: ${name}`
+         : c.tier === 2
+           ? `Scout suggests ${name}`
+           : 'Recently listed';
+   if (taste !== null && taste >= TASTE_REASON_AT && source.entityName) {
+      base += ` · popular with ${source.entityName} fans`;
    }
-   if (c.tier === 2) return `Scout suggests ${name}`;
-   return 'Recently listed';
+   return base.length > REASON_MAX ? `${base.slice(0, REASON_MAX - 1)}…` : base;
 }
 
-/** Fallback ladder level, for logs: 2 scored, 3 no wants, 4 no candidates. */
-export function ladderLevel(source: SourceInput, candidateCount: number): 2 | 3 | 4 {
-   if (candidateCount === 0) return 4;
-   return source.wantRanks.size === 0 ? 3 : 2;
+/** strong ≥ 0.70, partial ≥ 0.40, none below, unknown when null. */
+export function checkResult(v: number | null): CheckResult {
+   if (v === null) return 'unknown';
+   if (v >= STRONG_AT) return 'strong';
+   if (v >= 0.4) return 'partial';
+   return 'none';
+}
+
+/** Tag types worth showing people, in display order (others such as
+ *  brand_type, business_model or key_market read as noise). */
+export const SHOWN_TAG_PREFIXES = [
+   'urn:tag:genre:brand:',
+   'urn:tag:aesthetic_property:',
+   'urn:tag:lifestyle:',
+   'urn:tag:core_value:',
+];
+
+function tagOrder(tagId: string): number {
+   return SHOWN_TAG_PREFIXES.findIndex((p) => tagId.startsWith(p));
+}
+
+/** Shown tags both brands share, genre first, at most six. */
+export function sharedTags(a: TagRef[] = [], b: TagRef[] = []): TagRef[] {
+   const other = new Set(b.map((t) => t.tag_id));
+   return a
+      .filter((t) => other.has(t.tag_id) && tagOrder(t.tag_id) >= 0)
+      .map((t, i) => ({ t, i, o: tagOrder(t.tag_id) }))
+      .sort((x, y) => x.o - y.o || x.i - y.i)
+      .map(({ t }) => t)
+      .slice(0, SHARED_TAGS_MAX);
+}
+
+export function buildExplanation(args: {
+   score: number;
+   tier: PoolTier;
+   reason: string;
+   wants: number | null;
+   taste: number | null;
+   reciprocal: number | null;
+   tags: TagRef[];
+}): MatchExplanation {
+   return {
+      score_label: scoreLabel(args.score, args.tier),
+      reason: args.reason,
+      checked: [
+         { key: 'wants_fit', label: 'Fits what you want', result: checkResult(args.wants) },
+         { key: 'taste_fit', label: 'Similar taste', result: checkResult(args.taste) },
+         { key: 'reciprocal_fit', label: 'They may want yours', result: checkResult(args.reciprocal) },
+         // Needs taste profiles (Phase 4, taste profile step).
+         { key: 'shared_interests', label: 'Shared interests', result: 'unknown' },
+      ],
+      shared_interests: [],
+      shared_tags: args.tags,
+      source: args.taste !== null ? 'qloo' : 'fallback',
+   };
 }
 
 /**
- * Scores, sorts and keeps the top MAX_MATCHES. With no wants (level 3)
- * candidates are ordered by recency only and W/R are not stored.
+ * Brands to send to Qloo: distinct candidate entities in the given order
+ * (best W/R first), skipping the signals themselves (they score 1.00).
  */
-export function rankMatches(
+export function pickTasteEntities(
+   ordered: CandidateInput[],
+   signals: Set<string>,
+   max = MAX_TASTE_ENTITIES,
+): string[] {
+   const out: string[] = [];
+   const seen = new Set<string>();
+   for (const c of ordered) {
+      const e = c.entityId;
+      if (!e || signals.has(e) || seen.has(e)) continue;
+      seen.add(e);
+      out.push(e);
+      if (out.length >= max) break;
+   }
+   return out;
+}
+
+/**
+ * Component T per candidate: affinity rescaled within the returned set as
+ * (a - min) / (max - min) (1.00 when they are all equal); a candidate whose
+ * brand is a signal scores 1.00; no brand or not returned -> null.
+ */
+export function tasteScores(
+   candidates: CandidateInput[],
+   signals: Set<string>,
+   affinity: Map<string, number>,
+): Map<string, number | null> {
+   const values = [...affinity.values()];
+   const lo = Math.min(...values);
+   const hi = Math.max(...values);
+   const out = new Map<string, number | null>();
+   for (const c of candidates) {
+      const e = c.entityId;
+      if (!e) out.set(c.id, null);
+      else if (signals.has(e)) out.set(c.id, 1);
+      else if (affinity.has(e)) {
+         const a = affinity.get(e)!;
+         out.set(c.id, hi > lo ? round3((a - lo) / (hi - lo)) : 1);
+      } else out.set(c.id, null);
+   }
+   return out;
+}
+
+/** Fallback ladder level, for logs: 1 with T (O is never set yet), 2 without, 3 no wants, 4 no candidates. */
+export function ladderLevel(
+   source: SourceInput,
+   candidateCount: number,
+   tasteUsed = false,
+): 1 | 2 | 3 | 4 {
+   if (candidateCount === 0) return 4;
+   if (source.wantRanks.size === 0) return 3;
+   return tasteUsed ? 1 : 2;
+}
+
+/**
+ * Scores and sorts every candidate. With no wants (level 3) candidates are
+ * ordered by recency only and W/R/T are not stored. `taste` maps candidate
+ * id -> T (null or absent: no taste component).
+ */
+export function scoreAll(
    source: SourceInput,
    candidates: CandidateInput[],
    ownerWants: OwnerWants,
    weights: MatchWeights,
-): ScoredMatch[] {
+   taste: Map<string, number | null> | null = null,
+): Omit<ScoredMatch, 'rank'>[] {
    const noWants = source.wantRanks.size === 0;
    const noteWords = keywords(source.note);
 
    const scored = candidates.map((c) => {
       const w = noWants ? null : wantsFit(source, c, noteWords);
       const r = noWants ? null : reciprocalFit(source.categoryId, ownerWants.get(c.userId));
+      const t = noWants ? null : (taste?.get(c.id) ?? null);
       const score = noWants
          ? 0
          : combine(
-              { wants: w, taste: null, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
+              { wants: w, taste: t, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
               weights,
            );
-      return { c, w, r, score };
+      return { c, w, r, t, score };
    });
 
    scored.sort(
@@ -189,16 +343,40 @@ export function rankMatches(
          (a.c.id < b.c.id ? 1 : -1),
    );
 
-   return scored.slice(0, MAX_MATCHES).map(({ c, w, r, score }, i) => ({
-      candidateItemId: c.id,
-      rank: i + 1,
-      score,
-      wantsFit: w,
-      tasteAffinity: null,
-      reciprocalFit: r,
-      ownerCompatibility: null,
-      poolTier: c.tier,
-      source: 'fallback',
-      reason: templateReason(source, c),
-   }));
+   return scored.map(({ c, w, r, t, score }) => {
+      const reason = templateReason(source, c, t);
+      return {
+         candidateItemId: c.id,
+         score,
+         wantsFit: w,
+         tasteAffinity: t,
+         reciprocalFit: r,
+         ownerCompatibility: null,
+         poolTier: c.tier,
+         source: t !== null ? 'qloo' : 'fallback',
+         reason,
+         explanation: buildExplanation({
+            score,
+            tier: c.tier,
+            reason,
+            wants: w,
+            taste: t,
+            reciprocal: r,
+            tags: sharedTags(source.tags, c.tags),
+         }),
+      };
+   });
+}
+
+/** scoreAll, keeping the top MAX_MATCHES with ranks from 1. */
+export function rankMatches(
+   source: SourceInput,
+   candidates: CandidateInput[],
+   ownerWants: OwnerWants,
+   weights: MatchWeights,
+   taste: Map<string, number | null> | null = null,
+): ScoredMatch[] {
+   return scoreAll(source, candidates, ownerWants, weights, taste)
+      .slice(0, MAX_MATCHES)
+      .map((m, i) => ({ ...m, rank: i + 1 }));
 }

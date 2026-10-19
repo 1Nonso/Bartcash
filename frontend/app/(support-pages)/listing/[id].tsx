@@ -32,8 +32,16 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
+  MatchContext,
   retryItemValuation,
 } from "@/config/items";
+import {
+  CheckRow,
+  ScoreLabel,
+  ScoutBadge,
+  TagChip,
+  WantChip,
+} from "@/components/scout";
 import { getStoredUser } from "@/config/auth";
 
 type ConfidenceLevel = "high" | "medium" | "low";
@@ -345,12 +353,50 @@ function OwnerCard({ owner, onPress }: OwnerCardProps) {
   );
 }
 
+// ─── Why this matches (UI spec §13.10) ────────────────────────────────────────
+
+function WhyThisMatchesCard({ context }: { context: MatchContext }) {
+  const theme = useAuthTheme();
+  return (
+    <View style={[styles.whyCard, { backgroundColor: theme.aiSurface }]}>
+      <View style={styles.whyHeader}>
+        <Text style={[styles.whyTitle, { color: theme.textPrimary }]}>
+          Why this matches
+        </Text>
+        <ScoutBadge />
+      </View>
+      {context.score_label && <ScoreLabel label={context.score_label} />}
+      <Text style={[styles.whyReason, { color: theme.textSecondary }]}>
+        {context.reason}
+      </Text>
+      <View style={styles.whyChecks}>
+        {context.checked.map((c) => (
+          <CheckRow key={c.key} label={c.label} result={c.result} />
+        ))}
+      </View>
+      {context.shared_tags.length > 0 && (
+        <>
+          <Text style={[styles.whyTagsLabel, { color: theme.textSecondary }]}>
+            In common
+          </Text>
+          <View style={styles.chipWrap}>
+            {context.shared_tags.map((t) => (
+              <TagChip key={t.tag_id} name={t.name} />
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ListingDetailScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // context: the viewer's listing this was opened from on Home (match context).
+  const { id, context } = useLocalSearchParams<{ id: string; context?: string }>();
 
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -419,7 +465,7 @@ export default function ListingDetailScreen() {
     if (!id) return;
     try {
       const [data, user] = await Promise.all([
-        getItemById(id),
+        getItemById(id, context),
         getStoredUser(),
       ]);
       setItem(data);
@@ -449,7 +495,7 @@ export default function ListingDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [contentAnim, id, startValuationPolling]);
+  }, [contentAnim, id, context, startValuationPolling]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
@@ -701,6 +747,10 @@ export default function ListingDetailScreen() {
             onRetry={handleRetryValuation}
           />
 
+          {item.match_context && (
+            <WhyThisMatchesCard context={item.match_context} />
+          )}
+
           {item.description && (
             <View
               style={[styles.section, { borderTopColor: theme.borderSubtle }]}
@@ -743,7 +793,40 @@ export default function ListingDetailScreen() {
             </Text>
           </View>
 
-          {item.desired_trade && (
+          {item.wants && item.wants.length > 0 ? (
+            <View
+              style={[styles.section, { borderTopColor: theme.borderSubtle }]}
+            >
+              <View style={styles.sectionHeader}>
+                <Ionicons
+                  name="swap-horizontal-outline"
+                  size={16}
+                  color={theme.textPrimary}
+                />
+                <Text
+                  style={[styles.sectionTitle, { color: theme.textPrimary }]}
+                >
+                  {item.owner.first_name} would take
+                </Text>
+              </View>
+              <View style={styles.chipWrap}>
+                {item.wants.map((w) => (
+                  <WantChip key={w.category.id} name={w.category.name} rank={w.rank} />
+                ))}
+              </View>
+              {!!item.desired_trade && (
+                <Text
+                  style={[
+                    styles.sectionBody,
+                    styles.wantNote,
+                    { color: theme.textMuted },
+                  ]}
+                >
+                  {item.desired_trade}
+                </Text>
+              )}
+            </View>
+          ) : !!item.desired_trade && (
             <View
               style={[styles.section, { borderTopColor: theme.borderSubtle }]}
             >
@@ -1030,6 +1113,19 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { ...Typography.bodyMedium },
   sectionBody: { ...Typography.body, lineHeight: 22 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: Spacing[2] },
+  wantNote: { marginTop: Spacing[2] },
+  whyCard: {
+    marginTop: Spacing[3],
+    borderRadius: Radius.xl,
+    padding: Spacing[4],
+    gap: Spacing[2],
+  },
+  whyHeader: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
+  whyTitle: { ...Typography.bodyMedium, flex: 1 },
+  whyReason: { ...Typography.body },
+  whyChecks: { marginTop: Spacing[1] },
+  whyTagsLabel: { ...Typography.captionMedium, marginTop: Spacing[1] },
   locationRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
   locationText: { ...Typography.body },
 

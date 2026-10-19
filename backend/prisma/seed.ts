@@ -3,12 +3,12 @@ import { db } from '../src/config/db.config';
 
 const CATEGORIES = [
    {
-      name: 'Electronics',
+      name: 'Electronics, Phones & Appliances',
       slug: 'electronics',
       icon: 'device',
    },
    {
-      name: 'Fashion & Apparel',
+      name: 'Fashion & Beauty',
       slug: 'fashion-apparel',
       icon: 'shirt',
    },
@@ -18,17 +18,7 @@ const CATEGORIES = [
       icon: 'sofa',
    },
    {
-      name: 'Books & Stationery',
-      slug: 'books-stationery',
-      icon: 'book',
-   },
-   {
-      name: 'Phones & Tablets',
-      slug: 'phones-tablets',
-      icon: 'phone',
-   },
-   {
-      name: 'Vehicles & Parts',
+      name: 'Vehicles, Parts & Tools',
       slug: 'vehicles-parts',
       icon: 'car',
    },
@@ -38,9 +28,9 @@ const CATEGORIES = [
       icon: 'dumbbell',
    },
    {
-      name: 'Beauty & Personal Care',
-      slug: 'beauty-personal-care',
-      icon: 'sparkles',
+      name: 'Books & Stationery',
+      slug: 'books-stationery',
+      icon: 'book',
    },
    {
       name: 'Kids & Baby',
@@ -48,24 +38,9 @@ const CATEGORIES = [
       icon: 'baby',
    },
    {
-      name: 'Appliances',
-      slug: 'appliances',
-      icon: 'washing-machine',
-   },
-   {
-      name: 'Tools & Equipment',
-      slug: 'tools-equipment',
-      icon: 'wrench',
-   },
-   {
       name: 'Services',
       slug: 'services',
       icon: 'handshake',
-   },
-   {
-      name: 'Food & Groceries',
-      slug: 'food-groceries',
-      icon: 'shopping-basket',
    },
    {
       name: 'Other',

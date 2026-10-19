@@ -1,64 +1,23 @@
 // ============================================================================
-// Bartcash — Prisma schema (Express/Postgres target)
+// Bartcash — Prisma schema (Express/Postgres)
 // ============================================================================
-// Source of truth for this file, in order of authority:
-//   1. bartcash_migration_guide.docx — Sprint 1 (schema additions) and
-//      Sprint 6 (negotiation mechanics). This is the most current, most
-//      specific spec for the Express build and overrides the general SDLC
-//      docs wherever they disagree (see "Known conflicts" below).
-//   2. 001_express_migration_prep.sql — authoritative for every FK index.
-//   3. bartcash_phase3_modelling_design.docx (original 13 models, §3) —
-//      still authoritative for every table NOT touched by the migration
-//      guide (users, items core fields, trades core fields, messages,
-//      ratings, disputes, notifications, etc.).
+// Source of truth: bartcash_phase3_modelling_design_v3 (v3.0, Oct 6 2026),
+// Section 3 (models), Section 4 (relationships), Section 10.12 (changes to
+// existing tables). 18 live models + 7 Qloo models (3.19 - 3.25) = 25.
 //
-// Design choices, confirmed (not assumptions — resolved against the
-// migration guide):
-//   1. Enum-like columns are String, not Prisma `enum`. Enforced at the
-//      application/validation layer (Zod), per Sprint 1's explicit note
-//      that Prisma introspection doesn't map Postgres CHECK constraints.
-//   2. Every FK index from 001_express_migration_prep.sql is reproduced
-//      with @@index.
-//   3. UUID PKs use @default(uuid()) (app-generated), matching Laravel's
-//      existing app-side UUID generation. The migration prep SQL doesn't
-//      touch column defaults, so this carries over unchanged.
-//   4. created_at/updated_at are @db.Timestamp(6) (no timezone), matching
-//      Laravel's default migration output — unchanged by the prep SQL.
-//   5. trade_offers has no round_number, status, or expires_at column.
-//      Sprint 6 deliberately uses lazy expiration instead of a scheduled
-//      job: round_started_at lives on Trade, elapsed time is checked
-//      whenever the trade is read or acted on, and round number is
-//      derived by counting each trade's trade_offers rows. This is
-//      confirmed correct, not an inferred shortcut.
-//   6. items.user_declared_value is a single value, per explicit product
-//      decision made directly with the founder — not a range. (The
-//      separately-sourced migration guide assumed a range without this
-//      context; that assumption is overridden here.)
-//   7. transactions and comments field lists are copied verbatim from
-//      Sprint 1 — trade_type, receiver_item_id, offered_item_ids,
-//      agreed_cash_amount, agreed_top_up_amount, agreed_at all confirmed
-//      required; comments has no deleted_at, confirmed a hard delete
-//      (DELETE /comments/{id} per Sprint 5 doesn't specify soft-delete,
-//      and no column exists to support one).
-//   8. item_valuations stays 1:1 with items, matching the original design
-//      doc ("Items hasOne ItemValuations") and the existing override/retry
-//      endpoints, which both act on a single row per item.
-//   9. Decimal precision for all new money/value fields is Decimal(10,2),
-//      matching the existing item_valuations.value_min/value_max
-//      precision — no conflicting guidance in either source document.
-//   10. otp_codes and a rate-limit table are intentionally excluded —
-//       Sprint 2 explicitly leaves both as "in-memory store or a small
-//       dedicated table," i.e. an open implementation choice, not a
-//       required schema addition.
+// Conventions (Phase 3, Section 3.0):
+//   - UUID PKs, app-generated via @default(uuid()), native uuid column.
+//   - Enum-like columns are String (VARCHAR) validated with Zod. No Prisma
+//     enums, no CHECK constraints. Allowed values are in /// comments.
+//   - created_at / updated_at are Timestamp(6) (no timezone). Exceptions:
+//     trade_offers, otp_codes, qloo_cache: created_at only;
+//     transactions, rate_limit_attempts: none; qloo_usage: updated_at only.
+//   - Money/values are Decimal(10,2), USD everywhere.
+//   - Soft delete (deleted_at): users, items, trades, messages, ratings.
+//     Comments are hard-deleted.
+//   - Schema is applied with `prisma db push` (no migration history).
 //
-// ⚠ ONE REMAINING ACTION ITEM (not a schema conflict — a process gap):
-//   - The migration guide's 10 sprints don't include shipping (Phase A),
-//     because that guide was produced separately and predates this design.
-//     Shipping is a real, decided feature (Section 3.17 of the Modelling
-//     & Design doc) and is included in this schema as the Shipment model.
-//     The migration guide itself needs a new sprint added for it before
-//     Sprint 6/8 implementation — this schema isn't waiting on that, but
-//     the guide is now the document that's out of date, not this file.
+// Qloo models are additive. With QLOO_ENABLED=false they sit unused.
 // ============================================================================
 
 // This is your Prisma schema file,
@@ -76,62 +35,71 @@ datasource db {
 }
 
 // ----------------------------------------------------------------------------
-// Users
+// Users (3.1)
 // ----------------------------------------------------------------------------
 model User {
-  id                String    @id @default(uuid()) @db.Uuid
-  firstName         String    @map("first_name") @db.VarChar(100)
-  lastName          String    @map("last_name") @db.VarChar(100)
-  email             String    @unique @db.VarChar(255)
-  password          String    @db.VarChar(255)
-  profilePhoto      String?   @map("profile_photo") @db.VarChar(500)
-  bio               String?
-  location          String?   @db.VarChar(255)
-  averageRating     Decimal   @default(0.00) @map("average_rating") @db.Decimal(3, 2)
-  totalTrades       Int       @default(0) @map("total_trades")
-  isActive          Boolean   @default(true) @map("is_active")
-  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamp(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamp(6)
-  pushToken         String?   @map("push_token")
+  id              String    @id @default(uuid()) @db.Uuid
+  firstName       String    @map("first_name") @db.VarChar(100)
+  lastName        String    @map("last_name") @db.VarChar(100)
+  email           String    @unique @db.VarChar(255)
+  password        String    @db.VarChar(255)
+  profilePhoto    String?   @map("profile_photo") @db.VarChar(500)
+  bio             String?
+  location        String?   @db.VarChar(255)
+  averageRating   Decimal   @default(0.00) @map("average_rating") @db.Decimal(3, 2)
+  totalTrades     Int       @default(0) @map("total_trades")
+  isActive        Boolean   @default(true) @map("is_active")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamp(6)
+  pushToken       String?   @map("push_token")
+  /// [Planned, Qloo] Set when the taste profile is saved; used to mark
+  /// taste_compatibilities rows stale (Phase 3, 10.12)
+  tasteUpdatedAt  DateTime? @map("taste_updated_at") @db.Timestamp(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamp(6)
 
-  items                    Item[]
-  refreshTokens            RefreshToken[]
-  passwordResetTokens      PasswordResetToken[]
-  notifications            Notification[]
-  messagesSent             Message[]            @relation("MessagesBySender")
-  tradesAsProposer         Trade[]              @relation("TradesAsProposer")
-  tradesAsReceiver         Trade[]              @relation("TradesAsReceiver")
-  tradesCancelled          Trade[]              @relation("TradesCancelledBy")
-  tradesCurrentOffer       Trade[]              @relation("TradesCurrentOfferBy")
-  tradesAwaitingResponse   Trade[]              @relation("TradesAwaitingResponseFrom")
-  tradeItemsOffered        TradeItem[]          @relation("TradeItemsOfferedBy")
-  tradeOffersMade          TradeOffer[]         @relation("TradeOffersOfferedBy")
-  transactionsAsProposer   Transaction[]        @relation("TransactionsAsProposer")
-  transactionsAsReceiver   Transaction[]        @relation("TransactionsAsReceiver")
-  ratingsGiven             Rating[]             @relation("RatingsAsRater")
-  ratingsReceived          Rating[]             @relation("RatingsAsRated")
-  disputesRaised           Dispute[]            @relation("DisputesRaisedBy")
-  comments                 Comment[]
+  items                  Item[]
+  refreshTokens          RefreshToken[]
+  passwordResetTokens    PasswordResetToken[]
+  notifications          Notification[]
+  messagesSent           Message[]            @relation("MessagesBySender")
+  tradesAsProposer       Trade[]              @relation("TradesAsProposer")
+  tradesAsReceiver       Trade[]              @relation("TradesAsReceiver")
+  tradesCancelled        Trade[]              @relation("TradesCancelledBy")
+  tradesCurrentOffer     Trade[]              @relation("TradesCurrentOfferBy")
+  tradesAwaitingResponse Trade[]              @relation("TradesAwaitingResponseFrom")
+  tradeItemsOffered      TradeItem[]          @relation("TradeItemsOfferedBy")
+  tradeOffersMade        TradeOffer[]         @relation("TradeOffersOfferedBy")
+  transactionsAsProposer Transaction[]        @relation("TransactionsAsProposer")
+  transactionsAsReceiver Transaction[]        @relation("TransactionsAsReceiver")
+  ratingsGiven           Rating[]             @relation("RatingsAsRater")
+  ratingsReceived        Rating[]             @relation("RatingsAsRated")
+  disputesRaised         Dispute[]            @relation("DisputesRaisedBy")
+  comments               Comment[]
+
+  // [Planned, Qloo]
+  tasteEntities               UserTasteEntity[]
+  tasteCompatibilitiesAsUserA TasteCompatibility[] @relation("TasteCompatibilityUserA")
+  tasteCompatibilitiesAsUserB TasteCompatibility[] @relation("TasteCompatibilityUserB")
 
   @@map("users")
 }
 
 // ----------------------------------------------------------------------------
-// RefreshTokens
+// RefreshTokens (3.2)
 // ----------------------------------------------------------------------------
 model RefreshToken {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  token      String    @unique @db.VarChar(500)
-  expiresAt  DateTime  @map("expires_at") @db.Timestamp(6)
-  revoked    Boolean   @default(false)
-  revokedAt  DateTime? @map("revoked_at") @db.Timestamp(6)
-  ipAddress  String?   @map("ip_address") @db.VarChar(45)
-  userAgent  String?   @map("user_agent")
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// SHA-256 hash of the 128-character hex token
+  token     String    @unique @db.VarChar(500)
+  expiresAt DateTime  @map("expires_at") @db.Timestamp(6)
+  revoked   Boolean   @default(false)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamp(6)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
   user User @relation(fields: [userId], references: [id])
 
@@ -141,11 +109,12 @@ model RefreshToken {
 }
 
 // ----------------------------------------------------------------------------
-// PasswordResetTokens
+// PasswordResetTokens (3.3)
 // ----------------------------------------------------------------------------
 model PasswordResetToken {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
+  /// SHA-256 hash of the 64-character hex token
   token     String    @db.VarChar(500)
   expiresAt DateTime  @map("expires_at") @db.Timestamp(6)
   used      Boolean   @default(false)
@@ -160,7 +129,40 @@ model PasswordResetToken {
 }
 
 // ----------------------------------------------------------------------------
-// Categories
+// OtpCodes (3.4) — email verification codes. created_at only.
+// ----------------------------------------------------------------------------
+model OtpCode {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @db.VarChar(255)
+  /// bcrypt hash of the 6-digit code
+  codeHash  String   @map("code_hash") @db.VarChar(255)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([email], map: "idx_otp_codes_email")
+  @@map("otp_codes")
+}
+
+// ----------------------------------------------------------------------------
+// RateLimitAttempts (3.5) — fixed-window limiter for auth endpoints.
+// Key prefixes: login:, forgot-password:, resend-otp-limit:
+// ----------------------------------------------------------------------------
+model RateLimitAttempt {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(255)
+  count       Int      @default(0)
+  windowStart DateTime @map("window_start") @db.Timestamp(6)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(6)
+
+  @@map("rate_limit_attempts")
+}
+
+// ----------------------------------------------------------------------------
+// Categories (3.6)
+// Seeded by prisma/seed.ts (upsert on slug). Planned: 14 -> 9 by renaming 4
+// and setting is_active=false on 5 (data change only, Phase 3 10.5).
+// Inactive categories are hidden and cannot be used for new items.
 // ----------------------------------------------------------------------------
 model Category {
   id        String   @id @default(uuid()) @db.Uuid
@@ -173,43 +175,53 @@ model Category {
 
   items Item[]
 
+  // [Planned, Qloo]
+  itemWants ItemWant[]
+
   @@map("categories")
 }
 
 // ----------------------------------------------------------------------------
-// Items
-// (Called "listings" in some v2.1 API-response language and in the
-// comments table's listing_id column — same underlying table, no
-// separate Listings table exists anywhere.)
+// Items (3.7)
+// "Listing" appears only in comments.listing_id and UI language — same table.
 // ----------------------------------------------------------------------------
 model Item {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  categoryId String   @map("category_id") @db.Uuid
-  title     String    @db.VarChar(255)
-  description String  @db.Text
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  categoryId   String    @map("category_id") @db.Uuid
+  title        String    @db.VarChar(255)
+  description  String    @db.Text
   /// One of: new, good, fair, poor
-  condition String    @db.VarChar(20)
-  desiredTrade String? @map("desired_trade") @db.Text
-  /// One of: available, in_trade, traded, inactive
-  status    String    @default("available") @db.VarChar(20)
-  isService Boolean   @default(false) @map("is_service")
-  location  String?   @db.VarChar(255)
-  // --- v2.1: dual valuation, single value (explicit product decision —
-  // NOT a range; a separately-sourced migration guide independently
-  // assumed a range without this context, and that assumption was wrong) ---
+  condition    String    @db.VarChar(20)
+  /// Optional note shown to other traders. With Qloo, matching uses
+  /// item_wants instead (this is only a small keyword bonus).
+  desiredTrade String?   @map("desired_trade") @db.Text
+  /// One of: draft, available, in_trade, traded, inactive.
+  /// The API creates items as draft; the column default is not used by it.
+  status       String    @default("available") @db.VarChar(20)
+  /// Immutable after creation
+  isService    Boolean   @default(false) @map("is_service")
+  location     String?   @db.VarChar(255)
+  /// Single USD value declared by the owner at publish time. NOT a range.
+  /// Shown beside, never merged with, the AI estimate.
   userDeclaredValue Decimal? @map("user_declared_value") @db.Decimal(10, 2)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamp(6)
 
-  user       User            @relation(fields: [userId], references: [id])
-  category   Category        @relation(fields: [categoryId], references: [id])
-  images     ItemImage[]
-  valuation  ItemValuation?
-  tradeItems TradeItem[]
-  comments   Comment[]
+  user                       User           @relation(fields: [userId], references: [id])
+  category                   Category       @relation(fields: [categoryId], references: [id])
+  images                     ItemImage[]
+  valuation                  ItemValuation?
+  tradeItems                 TradeItem[]
+  comments                   Comment[]
   transactionsAsReceiverItem Transaction[]
+
+  // [Planned, Qloo]
+  taste               ItemTaste?
+  wants               ItemWant[]
+  matchesAsSource     MatchResult[] @relation("MatchResultSourceItem")
+  matchesAsCandidate  MatchResult[] @relation("MatchResultCandidateItem")
 
   @@index([userId], map: "idx_items_user_id")
   @@index([categoryId], map: "idx_items_category_id")
@@ -217,7 +229,7 @@ model Item {
 }
 
 // ----------------------------------------------------------------------------
-// ItemImages
+// ItemImages (3.8) — max six per item; first uploaded is primary.
 // ----------------------------------------------------------------------------
 model ItemImage {
   id           String   @id @default(uuid()) @db.Uuid
@@ -235,26 +247,25 @@ model ItemImage {
 }
 
 // ----------------------------------------------------------------------------
-// ItemValuations
-// 1:1 with Item — confirmed by the original design doc ("Items hasOne
-// ItemValuations") and by the override/retry endpoints both acting on a
-// single row per item.
+// ItemValuations (3.9) — 1:1 with Item.
 // ----------------------------------------------------------------------------
 model ItemValuation {
-  id           String    @id @default(uuid()) @db.Uuid
-  itemId       String    @unique @map("item_id") @db.Uuid
-  valueMin     Decimal?   @map("value_min") @db.Decimal(10, 2)
-  valueMax     Decimal?   @map("value_max") @db.Decimal(10, 2)
-  currency     String    @default("USD") @db.VarChar(3)
-  /// Groq confidence level: high, medium, low
-  confidence   String?   @db.VarChar(20)
-  rawResponse  Json?     @map("raw_response")
-  apiModel     String?   @map("api_model") @db.VarChar(100)
+  id           String   @id @default(uuid()) @db.Uuid
+  itemId       String   @unique @map("item_id") @db.Uuid
+  valueMin     Decimal? @map("value_min") @db.Decimal(10, 2)
+  valueMax     Decimal? @map("value_max") @db.Decimal(10, 2)
+  currency     String   @default("USD") @db.VarChar(3)
+  /// Bucketed from the model score: high (80+), medium (50-79), low (<50).
+  /// Null after a manual override.
+  confidence   String?  @db.VarChar(20)
+  /// Full provider response, for auditing. Never returned by the API.
+  rawResponse  Json?    @map("raw_response")
+  apiModel     String?  @map("api_model") @db.VarChar(100)
   /// One of: pending, completed, failed
-  status       String    @default("pending") @db.VarChar(20)
-  failedReason String?   @map("failed_reason") @db.Text
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  status       String   @default("pending") @db.VarChar(20)
+  failedReason String?  @map("failed_reason") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   item Item @relation(fields: [itemId], references: [id])
 
@@ -263,55 +274,48 @@ model ItemValuation {
 }
 
 // ----------------------------------------------------------------------------
-// Trades
+// Trades (3.10)
 // ----------------------------------------------------------------------------
 model Trade {
-  id                String    @id @default(uuid()) @db.Uuid
-  proposerId        String    @map("proposer_id") @db.Uuid
-  receiverId        String    @map("receiver_id") @db.Uuid
-  /// One of: pending (legacy — new trades now created directly as
-  /// negotiating per migration guide Sprint 6), negotiating, accepted,
-  /// declined, completed, disputed, cancelled. There is no separate
-  /// "expired" status — a timed-out round auto-declines directly to
-  /// declined (see round_started_at below).
-  status            String    @db.VarChar(20)
-  /// One of: meetup, delivery. Unchanged by this migration — shipping
-  /// (Phase A, documented in Phase 4a/4b/4c v2.1) is not yet part of the
-  /// Express migration plan; see header note.
-  completionMethod  String?   @map("completion_method") @db.VarChar(20)
-  meetupDetails     String?   @map("meetup_details") @db.Text
-  deliveryDetails   String?   @map("delivery_details") @db.Text
-  completedAt       DateTime? @map("completed_at") @db.Timestamp(6)
-  cancelledAt       DateTime? @map("cancelled_at") @db.Timestamp(6)
-  cancelledBy       String?   @map("cancelled_by") @db.Uuid
-  /// Who made the current pending offer — the other party is the one
-  /// whose turn it is to respond. Required by Sprint 6's rebargain
-  /// validation ("must be the calling user's turn").
-  currentOfferBy    String?   @map("current_offer_by") @db.Uuid
-  /// When the current round began. Sprint 6's chosen mechanism for the
-  /// 3-hour round timer is lazy expiration: elapsed time from this
-  /// timestamp is checked whenever the trade is read or acted on, rather
-  /// than via a stored per-offer expiry or a scheduled job.
-  roundStartedAt    DateTime? @map("round_started_at") @db.Timestamp(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamp(6)
-  tradeType             String    @map("trade_type") @db.VarChar(20)
-  awaitingResponseFrom  String?   @map("awaiting_response_from") @db.Uuid
-  proposerConfirmed     Boolean   @default(false) @map("proposer_confirmed")
-  receiverConfirmed     Boolean   @default(false) @map("receiver_confirmed")
+  id                   String    @id @default(uuid()) @db.Uuid
+  proposerId           String    @map("proposer_id") @db.Uuid
+  receiverId           String    @map("receiver_id") @db.Uuid
+  /// One of: item, cash. An "item" trade may carry an optional top_up_amount.
+  tradeType            String    @map("trade_type") @db.VarChar(20)
+  /// One of: negotiating, accepted, declined, completed, disputed, cancelled.
+  /// "pending" is legacy and no longer written. A timed-out round goes
+  /// straight to declined (lazy expiry).
+  status               String    @db.VarChar(20)
+  /// Author of the live offer
+  currentOfferBy       String?   @map("current_offer_by") @db.Uuid
+  /// The user whose turn it is to accept, decline or counter
+  awaitingResponseFrom String?   @map("awaiting_response_from") @db.Uuid
+  /// Start of the current 3-hour round; checked lazily on read/act
+  roundStartedAt       DateTime? @map("round_started_at") @db.Timestamp(6)
+  /// One of: meetup, delivery. Set on acceptance.
+  completionMethod     String?   @map("completion_method") @db.VarChar(20)
+  meetupDetails        String?   @map("meetup_details") @db.Text
+  deliveryDetails      String?   @map("delivery_details") @db.Text
+  proposerConfirmed    Boolean   @default(false) @map("proposer_confirmed")
+  receiverConfirmed    Boolean   @default(false) @map("receiver_confirmed")
+  completedAt          DateTime? @map("completed_at") @db.Timestamp(6)
+  cancelledAt          DateTime? @map("cancelled_at") @db.Timestamp(6)
+  cancelledBy          String?   @map("cancelled_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamp(6)
 
-  awaitingResponseFromUser User? @relation("TradesAwaitingResponseFrom", fields: [awaitingResponseFrom], references: [id])
-  proposer       User          @relation("TradesAsProposer", fields: [proposerId], references: [id])
-  receiver       User          @relation("TradesAsReceiver", fields: [receiverId], references: [id])
-  cancelledByUser User?        @relation("TradesCancelledBy", fields: [cancelledBy], references: [id])
-  currentOfferByUser User?     @relation("TradesCurrentOfferBy", fields: [currentOfferBy], references: [id])
-  tradeItems     TradeItem[]
-  tradeOffers    TradeOffer[]
-  transaction    Transaction?
-  messages       Message[]
-  ratings        Rating[]
-  dispute        Dispute?
+  proposer                 User         @relation("TradesAsProposer", fields: [proposerId], references: [id])
+  receiver                 User         @relation("TradesAsReceiver", fields: [receiverId], references: [id])
+  cancelledByUser          User?        @relation("TradesCancelledBy", fields: [cancelledBy], references: [id])
+  currentOfferByUser       User?        @relation("TradesCurrentOfferBy", fields: [currentOfferBy], references: [id])
+  awaitingResponseFromUser User?        @relation("TradesAwaitingResponseFrom", fields: [awaitingResponseFrom], references: [id])
+  tradeItems               TradeItem[]
+  tradeOffers              TradeOffer[]
+  transaction              Transaction?
+  messages                 Message[]
+  ratings                  Rating[]
+  dispute                  Dispute?
 
   @@index([awaitingResponseFrom])
   @@index([proposerId], map: "idx_trades_proposer_id")
@@ -321,17 +325,17 @@ model Trade {
 }
 
 // ----------------------------------------------------------------------------
-// TradeItems
+// TradeItems (3.11) — one row per item per side; rewritten on counter-offer.
 // ----------------------------------------------------------------------------
 model TradeItem {
-  id         String   @id @default(uuid()) @db.Uuid
-  tradeId    String   @map("trade_id") @db.Uuid
-  itemId     String   @map("item_id") @db.Uuid
-  offeredBy  String   @map("offered_by") @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  tradeId   String   @map("trade_id") @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
+  offeredBy String   @map("offered_by") @db.Uuid
   /// One of: proposer, receiver
-  side       String   @db.VarChar(20)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  side      String   @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   trade         Trade @relation(fields: [tradeId], references: [id])
   item          Item  @relation(fields: [itemId], references: [id])
@@ -343,23 +347,19 @@ model TradeItem {
 }
 
 // ----------------------------------------------------------------------------
-// TradeOffers (v2.0/v2.1, new — negotiation history, one row per round)
-// Field list copied verbatim from migration guide Sprint 1. No
-// round_number, status, or expires_at column: round number is derived by
-// counting each trade's trade_offers rows, and the 3-hour timer is
-// enforced via Trade.round_started_at (lazy check), not a stored
-// per-offer expiry. This is Sprint 6's explicit, deliberate design —
-// not a simplification.
+// TradeOffers (3.12) — negotiation history, one row per offer. created_at only.
+// No round_number/status/expires_at: round = count of rows; timer lives on
+// trades.round_started_at.
 // ----------------------------------------------------------------------------
 model TradeOffer {
   id             String   @id @default(uuid()) @db.Uuid
   tradeId        String   @map("trade_id") @db.Uuid
   offeredBy      String   @map("offered_by") @db.Uuid
-  /// One of: item, cash, item_cash
+  /// Defined: item, cash, item_cash. The implementation writes only item and cash.
   tradeType      String   @map("trade_type") @db.VarChar(50)
   cashAmount     Decimal? @map("cash_amount") @db.Decimal(10, 2)
   topUpAmount    Decimal? @map("top_up_amount") @db.Decimal(10, 2)
-  /// Array of item UUIDs — application-level reference, not a Prisma relation
+  /// Array of item UUIDs on the offering side — application-level reference, not an FK
   offeredItemIds Json     @map("offered_item_ids")
   isCurrent      Boolean  @default(true) @map("is_current")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
@@ -373,30 +373,26 @@ model TradeOffer {
 }
 
 // ----------------------------------------------------------------------------
-// Transactions (v2.0/v2.1, new — created once a trade is accepted)
-// Field list copied verbatim from migration guide Sprint 1 (12 fields).
-// No created_at/updated_at — agreed_at/completed_at cover this table's
-// lifecycle timestamps.
+// Transactions (3.13) — terms snapshot, created on accept. No timestamps
+// besides agreed_at / completed_at.
 // ----------------------------------------------------------------------------
 model Transaction {
-  id                 String    @id @default(uuid()) @db.Uuid
-  tradeId            String    @unique @map("trade_id") @db.Uuid
-  /// One of: item, cash, item_cash
-  tradeType          String    @map("trade_type") @db.VarChar(50)
-  proposerId         String    @map("proposer_id") @db.Uuid
-  receiverId         String    @map("receiver_id") @db.Uuid
-  receiverItemId     String?   @map("receiver_item_id") @db.Uuid
-  /// Array of item UUIDs offered by the proposer — application-level reference
-  offeredItemIds     Json      @map("offered_item_ids")
-  agreedCashAmount   Decimal?  @map("agreed_cash_amount") @db.Decimal(10, 2)
-  agreedTopUpAmount  Decimal?  @map("agreed_top_up_amount") @db.Decimal(10, 2)
-  /// One of: pending_completion, completed. Dispute-driven status is not
-  /// addressed by Sprint 6/8/9 — decide when Sprint 9 (Disputes) is built
-  /// whether a transaction needs its own "disputed" value or relies on
-  /// the parent Trade.status instead.
-  status             String    @db.VarChar(30)
-  agreedAt           DateTime? @map("agreed_at") @db.Timestamp(6)
-  completedAt        DateTime? @map("completed_at") @db.Timestamp(6)
+  id                String    @id @default(uuid()) @db.Uuid
+  tradeId           String    @unique @map("trade_id") @db.Uuid
+  /// Copied from the trade
+  tradeType         String    @map("trade_type") @db.VarChar(50)
+  proposerId        String    @map("proposer_id") @db.Uuid
+  receiverId        String    @map("receiver_id") @db.Uuid
+  receiverItemId    String?   @map("receiver_item_id") @db.Uuid
+  /// Proposer items at acceptance — application-level reference, not an FK
+  offeredItemIds    Json      @map("offered_item_ids")
+  agreedCashAmount  Decimal?  @map("agreed_cash_amount") @db.Decimal(10, 2)
+  agreedTopUpAmount Decimal?  @map("agreed_top_up_amount") @db.Decimal(10, 2)
+  /// One of: pending_completion, completed. A disputed trade leaves the
+  /// transaction at pending_completion.
+  status            String    @db.VarChar(30)
+  agreedAt          DateTime? @map("agreed_at") @db.Timestamp(6)
+  completedAt       DateTime? @map("completed_at") @db.Timestamp(6)
 
   trade        Trade @relation(fields: [tradeId], references: [id])
   proposer     User  @relation("TransactionsAsProposer", fields: [proposerId], references: [id])
@@ -410,7 +406,7 @@ model Transaction {
 }
 
 // ----------------------------------------------------------------------------
-// Messages
+// Messages (3.14)
 // ----------------------------------------------------------------------------
 model Message {
   id        String    @id @default(uuid()) @db.Uuid
@@ -431,87 +427,7 @@ model Message {
 }
 
 // ----------------------------------------------------------------------------
-// Ratings
-// ----------------------------------------------------------------------------
-model Rating {
-  id        String    @id @default(uuid()) @db.Uuid
-  tradeId   String    @map("trade_id") @db.Uuid
-  raterId   String    @map("rater_id") @db.Uuid
-  ratedId   String    @map("rated_id") @db.Uuid
-  /// 1–5. Range not enforced by Prisma — add a CHECK constraint via raw
-  /// SQL in the migration, or validate at the application layer.
-  score     Int       @db.SmallInt
-  review    String?   @db.Text
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
-
-  trade Trade @relation(fields: [tradeId], references: [id])
-  rater User  @relation("RatingsAsRater", fields: [raterId], references: [id])
-  rated User  @relation("RatingsAsRated", fields: [ratedId], references: [id])
-
-  @@unique([tradeId, raterId])
-  @@index([tradeId], map: "idx_ratings_trade_id")
-  @@index([raterId], map: "idx_ratings_rater_id")
-  @@index([ratedId], map: "idx_ratings_rated_id")
-  @@map("ratings")
-}
-
-// ----------------------------------------------------------------------------
-// Disputes
-// ----------------------------------------------------------------------------
-model Dispute {
-  id               String    @id @default(uuid()) @db.Uuid
-  tradeId          String    @unique @map("trade_id") @db.Uuid
-  raisedBy         String    @map("raised_by") @db.Uuid
-  reason           String    @db.Text
-  /// One of: open, under_review, resolved, closed
-  status           String    @default("open") @db.VarChar(20)
-  resolutionNotes  String?   @map("resolution_notes") @db.Text
-  resolvedAt       DateTime? @map("resolved_at") @db.Timestamp(6)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  trade      Trade @relation(fields: [tradeId], references: [id])
-  raisedByUser User @relation("DisputesRaisedBy", fields: [raisedBy], references: [id])
-
-  @@index([tradeId], map: "idx_disputes_trade_id")
-  @@index([raisedBy], map: "idx_disputes_raised_by")
-  @@map("disputes")
-}
-
-// ----------------------------------------------------------------------------
-// Notifications
-// ----------------------------------------------------------------------------
-model Notification {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @map("user_id") @db.Uuid
-  /// One of: trade_request, trade_accepted, trade_declined, trade_completed,
-  /// new_message, dispute_raised, trade_cancelled, new_comment (v2.1 —
-  /// Sprint 5 doesn't specify a notification, added as a reasonable
-  /// inference; confirm before relying on it)
-  type          String    @db.VarChar(30)
-  title         String    @db.VarChar(255)
-  body          String    @db.Text
-  /// Polymorphic-style pointer (trade, message, etc.) — intentionally not
-  /// a Prisma relation since it can reference different tables.
-  referenceId   String?   @map("reference_id") @db.Uuid
-  referenceType String?   @map("reference_type") @db.VarChar(50)
-  readAt        DateTime? @map("read_at") @db.Timestamp(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId], map: "idx_notifications_user_id")
-  @@map("notifications")
-}
-
-// ----------------------------------------------------------------------------
-// Comments (v2.1, new — public per-listing enquiry, no trade state)
-// Field list copied verbatim from migration guide Sprint 1. No deleted_at:
-// DELETE /comments/{id} (Sprint 5) is a hard delete — there's no column
-// to support a soft delete, and neither Sprint 1 nor Sprint 5 asks for one.
+// Comments (3.15) — public per-listing enquiries. Hard delete, no deleted_at.
 // ----------------------------------------------------------------------------
 model Comment {
   id        String   @id @default(uuid()) @db.Uuid
@@ -530,29 +446,273 @@ model Comment {
 }
 
 // ----------------------------------------------------------------------------
-// OtpCodes (email verification / resend flow — replaces Laravel's Cache-based OTP storage)
+// Ratings (3.16)
 // ----------------------------------------------------------------------------
-model OtpCode {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @db.VarChar(255)
-  codeHash  String   @map("code_hash") @db.VarChar(255)
-  attempts  Int      @default(0)
-  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+model Rating {
+  id        String    @id @default(uuid()) @db.Uuid
+  tradeId   String    @map("trade_id") @db.Uuid
+  raterId   String    @map("rater_id") @db.Uuid
+  ratedId   String    @map("rated_id") @db.Uuid
+  /// 1-5, validated in the API (no CHECK constraint)
+  score     Int       @db.SmallInt
+  review    String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
 
-  @@index([email], map: "idx_otp_codes_email")
-  @@map("otp_codes")
+  trade Trade @relation(fields: [tradeId], references: [id])
+  rater User  @relation("RatingsAsRater", fields: [raterId], references: [id])
+  rated User  @relation("RatingsAsRated", fields: [ratedId], references: [id])
+
+  @@unique([tradeId, raterId])
+  @@index([tradeId], map: "idx_ratings_trade_id")
+  @@index([raterId], map: "idx_ratings_rater_id")
+  @@index([ratedId], map: "idx_ratings_rated_id")
+  @@map("ratings")
 }
 
 // ----------------------------------------------------------------------------
-// RateLimitAttempts (replaces Laravel's RateLimiter facade)
+// Disputes (3.17)
 // ----------------------------------------------------------------------------
-model RateLimitAttempt {
-  id          String   @id @default(uuid()) @db.Uuid
-  key         String   @unique @db.VarChar(255)
-  count       Int      @default(0)
-  windowStart DateTime @map("window_start") @db.Timestamp(6)
-  expiresAt   DateTime @map("expires_at") @db.Timestamp(6)
+model Dispute {
+  id              String    @id @default(uuid()) @db.Uuid
+  tradeId         String    @unique @map("trade_id") @db.Uuid
+  raisedBy        String    @map("raised_by") @db.Uuid
+  reason          String    @db.Text
+  /// One of: open, under_review, resolved, closed. Only open is set by the API.
+  status          String    @default("open") @db.VarChar(20)
+  /// Reserved for post-MVP resolution
+  resolutionNotes String?   @map("resolution_notes") @db.Text
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamp(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  @@map("rate_limit_attempts")
+  trade        Trade @relation(fields: [tradeId], references: [id])
+  raisedByUser User  @relation("DisputesRaisedBy", fields: [raisedBy], references: [id])
+
+  @@index([tradeId], map: "idx_disputes_trade_id")
+  @@index([raisedBy], map: "idx_disputes_raised_by")
+  @@map("disputes")
+}
+
+// ----------------------------------------------------------------------------
+// Notifications (3.18)
+// ----------------------------------------------------------------------------
+model Notification {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// One of: trade_request, trade_rebargain, trade_accepted, trade_declined,
+  /// trade_cancelled, trade_completed, trade_pending, dispute_raised,
+  /// new_message (declared but never sent)
+  type          String    @db.VarChar(30)
+  title         String    @db.VarChar(255)
+  body          String    @db.Text
+  /// Polymorphic pointer — intentionally not a Prisma relation
+  referenceId   String?   @map("reference_id") @db.Uuid
+  /// Trade or Dispute
+  referenceType String?   @map("reference_type") @db.VarChar(50)
+  readAt        DateTime? @map("read_at") @db.Timestamp(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_notifications_user_id")
+  @@map("notifications")
+}
+
+// ============================================================================
+// QLOO TASTE INTELLIGENCE — PLANNED (Phase 3 v3.0, Sections 3.19 - 3.25, 10)
+// Additive. Unused while QLOO_ENABLED=false.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// ItemTastes (3.19) — one row per item; written by the item-taste job.
+// ----------------------------------------------------------------------------
+model ItemTaste {
+  id               String    @id @default(uuid()) @db.Uuid
+  itemId           String    @unique @map("item_id") @db.Uuid
+  /// One of: pending, resolved, unresolved, failed
+  status           String    @default("pending") @db.VarChar(20)
+  qlooEntityId     String?   @map("qloo_entity_id") @db.VarChar(100)
+  qlooEntityName   String?   @map("qloo_entity_name") @db.VarChar(255)
+  /// Bartcash entity type, e.g. brand
+  qlooEntityType   String?   @map("qloo_entity_type") @db.VarChar(20)
+  /// One of: brand_extracted, title_search, none
+  resolutionSource String?   @map("resolution_source") @db.VarChar(30)
+  /// 0.00 to 1.00. Entities below 0.60 are discarded.
+  confidence       Decimal?  @db.Decimal(3, 2)
+  /// [{ tag_id, name }]
+  tags             Json?
+  /// Top 20: [{ entity_id, name, affinity, tag_ids }]
+  relatedEntities  Json?     @map("related_entities")
+  /// Exactly five when ready: [{ category_id, rank, reason }]
+  wantSuggestions  Json?     @map("want_suggestions")
+  /// One of: qloo, fallback
+  suggestionSource String?   @map("suggestion_source") @db.VarChar(20)
+  failedReason     String?   @map("failed_reason") @db.Text
+  resolvedAt       DateTime? @map("resolved_at") @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@map("item_tastes")
+}
+
+// ----------------------------------------------------------------------------
+// ItemWants (3.20) — 1 to 3 ranked wanted categories per item (max enforced
+// in the service layer).
+// ----------------------------------------------------------------------------
+model ItemWant {
+  id           String   @id @default(uuid()) @db.Uuid
+  itemId       String   @map("item_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  /// 1 to 3; 1 is most wanted
+  rank         Int      @db.SmallInt
+  /// True when the category was among the five suggested when it was picked
+  wasSuggested Boolean  @default(false) @map("was_suggested")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  item     Item     @relation(fields: [itemId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([itemId, categoryId])
+  @@unique([itemId, rank])
+  @@index([itemId], map: "idx_item_wants_item_id")
+  @@index([categoryId], map: "idx_item_wants_category_id")
+  @@map("item_wants")
+}
+
+// ----------------------------------------------------------------------------
+// UserTasteEntities (3.21) — taste profile interests. Max 25 per user
+// (service layer); profile is active at 3+ rows. Cascades on user delete.
+// ----------------------------------------------------------------------------
+model UserTasteEntity {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  qlooEntityId String   @map("qloo_entity_id") @db.VarChar(100)
+  name         String   @db.VarChar(255)
+  /// One of: brand, artist, movie, tv_show, videogame, book, podcast
+  /// (videogame, not video_game)
+  entityType   String   @map("entity_type") @db.VarChar(20)
+  imageUrl     String?  @map("image_url") @db.VarChar(500)
+  /// [{ tag_id, name }]
+  tags         Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, qlooEntityId])
+  @@index([userId], map: "idx_user_taste_user_id")
+  @@index([qlooEntityId], map: "idx_user_taste_entity_id")
+  @@map("user_taste_entities")
+}
+
+// ----------------------------------------------------------------------------
+// TasteCompatibilities (3.22) — one row per pair, user_a_id < user_b_id
+// (string comparison, enforced in the service layer). Cascades on user delete.
+// ----------------------------------------------------------------------------
+model TasteCompatibility {
+  id             String   @id @default(uuid()) @db.Uuid
+  userAId        String   @map("user_a_id") @db.Uuid
+  userBId        String   @map("user_b_id") @db.Uuid
+  /// 0 to 1
+  score          Decimal  @db.Decimal(4, 3)
+  /// local_overlap (the only method in use)
+  method         String   @db.VarChar(30)
+  /// [{ qloo_entity_id, name, entity_type }] recorded by both users
+  sharedEntities Json     @map("shared_entities")
+  /// [{ tag_id, name }] common to both profiles
+  sharedTags     Json?    @map("shared_tags")
+  /// Set when either profile changes; cleared on recompute
+  stale          Boolean  @default(false)
+  computedAt     DateTime @map("computed_at") @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  userA User @relation("TasteCompatibilityUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("TasteCompatibilityUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId], map: "idx_taste_compat_user_a")
+  @@index([userBId], map: "idx_taste_compat_user_b")
+  @@map("taste_compatibilities")
+}
+
+// ----------------------------------------------------------------------------
+// MatchResults (3.23) — cached ranked matches, max 50 per source item.
+// Cascades when either item is deleted.
+// ----------------------------------------------------------------------------
+model MatchResult {
+  id                 String   @id @default(uuid()) @db.Uuid
+  sourceItemId       String   @map("source_item_id") @db.Uuid
+  candidateItemId    String   @map("candidate_item_id") @db.Uuid
+  /// 1 is the best match for the source item
+  rank               Int
+  /// Combined score, 0 to 1
+  score              Decimal  @db.Decimal(4, 3)
+  /// Component W
+  wantsFit           Decimal? @map("wants_fit") @db.Decimal(4, 3)
+  /// Component T, normalised within the candidate set; null when Qloo
+  /// was unavailable or the candidate has no entity
+  tasteAffinity      Decimal? @map("taste_affinity") @db.Decimal(4, 3)
+  /// Component R
+  reciprocalFit      Decimal? @map("reciprocal_fit") @db.Decimal(4, 3)
+  /// Component O; null when either profile is inactive
+  ownerCompatibility Decimal? @map("owner_compatibility") @db.Decimal(4, 3)
+  /// 1 in a wanted category, 2 in an unpicked suggested category, 3 any other available item
+  poolTier           Int      @map("pool_tier") @db.SmallInt
+  /// qloo (T present) or fallback (T absent)
+  source             String   @db.VarChar(20)
+  reason             String?  @db.VarChar(255)
+  /// Why-this-matches payload
+  explanation        Json?
+  computedAt         DateTime @map("computed_at") @db.Timestamp(6)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  sourceItem    Item @relation("MatchResultSourceItem", fields: [sourceItemId], references: [id], onDelete: Cascade)
+  candidateItem Item @relation("MatchResultCandidateItem", fields: [candidateItemId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceItemId, candidateItemId])
+  @@index([sourceItemId, rank], map: "idx_match_results_source_rank")
+  @@index([candidateItemId], map: "idx_match_results_candidate")
+  @@map("match_results")
+}
+
+// ----------------------------------------------------------------------------
+// QlooCache (3.24) — DB-level cache of Qloo responses. created_at only.
+// Search/tags: 7 days. Insights: 24 hours. Failed responses never cached.
+// ----------------------------------------------------------------------------
+model QlooCache {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Hash of the endpoint and the sorted parameter set
+  cacheKey  String   @unique @map("cache_key") @db.VarChar(255)
+  /// search, insights or tags
+  endpoint  String   @db.VarChar(40)
+  response  Json
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([expiresAt], map: "idx_qloo_cache_expires_at")
+  @@map("qloo_cache")
+}
+
+// ----------------------------------------------------------------------------
+// QlooUsage (3.25) — single-row table tracking the reported call budget.
+// updated_at only.
+// ----------------------------------------------------------------------------
+model QlooUsage {
+  id                String   @id @default(uuid()) @db.Uuid
+  callsSinceStart   Int      @default(0) @map("calls_since_start")
+  /// Last x-month-ratelimit-remaining header value
+  remainingReported Int?     @map("remaining_reported")
+  /// Last x-month-ratelimit-limit header value (10000 observed)
+  limitReported     Int?     @map("limit_reported")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("qloo_usage")
 }

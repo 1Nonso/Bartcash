@@ -4,7 +4,9 @@ import { requireAuth } from '../middlewares/auth.middleware';
 import { runUploadMiddleware } from '../middlewares/upload.middleware';
 import * as itemController from '../controllers/item.controllers';
 import multer from 'multer';
-import { limiter } from '../libs/rateLimiter';
+import { limiter, userLimiter } from '../libs/rateLimiter';
+import { requireQloo } from '../middlewares/requireQloo.middleware';
+import * as wantsController from '../controllers/wants.controllers';
 
 const upload = multer({
    storage: multer.memoryStorage(),
@@ -75,6 +77,15 @@ router.post(
    requireAuth,
    limiter,
    itemController.retryValuation,
+);
+// Qloo wants (Phase 4b, Section 16.5). requireQloo runs before auth so a
+// disabled feature looks like it does not exist.
+router.get(
+   '/:id/want-suggestions',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   wantsController.wantSuggestions,
 );
 router.patch(
    '/:id/valuation/override',

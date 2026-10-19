@@ -178,40 +178,6 @@ export async function store(
                   },
                });
 
-               // Spec: total_trades is counted only on the first rating
-               // submitted for a trade — it applies to both participants.
-               const ratingsForTrade =
-                  await tx.rating.count(
-                     {
-                        where: {
-                           tradeId:
-                              trade.id,
-                        },
-                     },
-                  );
-               if (
-                  ratingsForTrade === 1
-               ) {
-                  await tx.user.updateMany(
-                     {
-                        where: {
-                           id: {
-                              in: [
-                                 trade.proposerId,
-                                 trade.receiverId,
-                              ],
-                           },
-                        },
-                        data: {
-                           totalTrades:
-                              {
-                                 increment: 1,
-                              },
-                        },
-                     },
-                  );
-               }
-
                return created;
             },
          );

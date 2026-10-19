@@ -272,10 +272,10 @@ export default function ReBargainScreen() {
 
         {theirItemValue !== null && (
           <View
-            style={[styles.aiReference, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.aiReference, { backgroundColor: theme.aiSurface }]}
           >
-            <Ionicons name="sparkles" size={14} color={Colors.ai} />
-            <Text style={[styles.aiReferenceText, { color: Colors.ai }]}>
+            <Ionicons name="sparkles" size={14} color={theme.ai} />
+            <Text style={[styles.aiReferenceText, { color: theme.ai }]}>
               Their item&apos;s AI value: ${theirItemValue.toLocaleString()}
             </Text>
           </View>

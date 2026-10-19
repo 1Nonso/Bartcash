@@ -353,13 +353,13 @@ export default function TradeAgreementScreen() {
         )}
 
         {/* Chat unlock notice */}
-        <View style={[styles.noticeBox, { backgroundColor: Colors.aiSurface }]}>
+        <View style={[styles.noticeBox, { backgroundColor: theme.aiSurface }]}>
           <Ionicons
             name="chatbubble-ellipses-outline"
             size={16}
-            color={Colors.ai}
+            color={theme.ai}
           />
-          <Text style={[styles.noticeText, { color: Colors.ai }]}>
+          <Text style={[styles.noticeText, { color: theme.ai }]}>
             Chat will open after you accept to arrange logistics.
           </Text>
         </View>

@@ -405,7 +405,7 @@ export default function TradeCompletionScreen() {
                 <View
                   style={[
                     styles.methodBadge,
-                    { backgroundColor: Colors.aiSurface },
+                    { backgroundColor: theme.aiSurface },
                   ]}
                 >
                   <Ionicons
@@ -415,9 +415,9 @@ export default function TradeCompletionScreen() {
                         : "cube-outline"
                     }
                     size={12}
-                    color={Colors.ai}
+                    color={theme.ai}
                   />
-                  <Text style={styles.methodBadgeText}>
+                  <Text style={[styles.methodBadgeText, { color: theme.ai }]}>
                     {trade.completion_method === "meetup"
                       ? "Meetup"
                       : "Delivery"}

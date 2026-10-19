@@ -134,11 +134,11 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (!valuation || valuation.status === "failed") {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
           {valuation?.failed_reason
@@ -152,14 +152,14 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (valuation.status === "pending") {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
         <View style={styles.valuationPending}>
-          <ActivityIndicator size="small" color={Colors.ai} />
+          <ActivityIndicator size="small" color={theme.ai} />
           <Text
             style={[styles.valuationPendingText, { color: theme.textMuted }]}
           >
@@ -173,25 +173,25 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (isOverride) {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="pricetag-outline" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Owner{"'"}s Estimated Value</Text>
+          <Ionicons name="pricetag-outline" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Owner{"'"}s Estimated Value</Text>
         </View>
-        <Text style={styles.valuationRange}>{range}</Text>
+        <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
         <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
           Set by the item owner
         </Text>
         <View
-          style={[styles.overrideBadge, { backgroundColor: Colors.aiLight }]}
+          style={[styles.overrideBadge, { backgroundColor: theme.aiLight }]}
         >
           <Ionicons
             name="information-circle-outline"
             size={13}
-            color={Colors.ai}
+            color={theme.ai}
           />
-          <Text style={[styles.overrideBadgeText, { color: Colors.ai }]}>
+          <Text style={[styles.overrideBadgeText, { color: theme.ai }]}>
             This value was manually set and may differ from market rates
           </Text>
         </View>
@@ -200,12 +200,12 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   }
 
   return (
-    <View style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}>
+    <View style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}>
       <View style={styles.valuationHeader}>
-        <Ionicons name="sparkles" size={16} color={Colors.ai} />
-        <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+        <Ionicons name="sparkles" size={16} color={theme.ai} />
+        <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
       </View>
-      <Text style={styles.valuationRange}>{range}</Text>
+      <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
       <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
         Based on similar items and market data
       </Text>
@@ -213,18 +213,18 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         <Text style={[styles.confidenceLabel, { color: theme.textMuted }]}>
           Confidence level
         </Text>
-        <Text style={styles.confidenceValue}>
+        <Text style={[styles.confidenceValue, { color: theme.ai }]}>
           {confidenceLevel
             ? confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1)
             : "—"}
         </Text>
       </View>
-      <View style={[styles.progressTrack, { backgroundColor: Colors.aiLight }]}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.aiLight }]}>
         <Animated.View
           style={[
             styles.progressFill,
             {
-              backgroundColor: Colors.ai,
+              backgroundColor: theme.ai,
               width: progressAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: ["0%", "100%"],
@@ -234,14 +234,14 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         />
       </View>
       <View
-        style={[styles.confidenceNote, { backgroundColor: Colors.aiLight }]}
+        style={[styles.confidenceNote, { backgroundColor: theme.aiLight }]}
       >
         <Ionicons
           name="information-circle-outline"
           size={13}
-          color={Colors.ai}
+          color={theme.ai}
         />
-        <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
+        <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
           {confidenceLevel === "high"
             ? "High Confidence — AI is very certain about this value"
             : confidenceLevel === "medium"
@@ -868,10 +868,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing[2],
   },
-  valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  valuationTitle: { ...Typography.bodyMedium },
   valuationRange: {
     ...Typography.cardTitleLarge,
-    color: Colors.text.primary,
     fontSize: 28,
     marginBottom: Spacing[1],
     paddingTop: Spacing[3],
@@ -891,7 +890,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[2],
   },
   confidenceLabel: { ...Typography.caption },
-  confidenceValue: { ...Typography.captionMedium, color: Colors.ai },
+  confidenceValue: { ...Typography.captionMedium },
   progressTrack: {
     height: 6,
     borderRadius: Radius.full,

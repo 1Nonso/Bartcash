@@ -25,6 +25,7 @@ import {
 } from '../utils/cursor';
 import { randomUUID } from 'node:crypto';
 import { isQlooEnabled } from '../config/features.config';
+import { queueMatchRefresh } from '../services/matchRefresh.service';
 import {
    formatOwner,
    formatValuation,
@@ -371,6 +372,7 @@ export async function publish(
    );
 
    await ensureItemTaste(id);
+   await queueMatchRefresh(id, 'publish');
 
    const warning =
       checkDeclaredValueOutlier(

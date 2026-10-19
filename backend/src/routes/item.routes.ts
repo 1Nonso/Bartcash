@@ -7,6 +7,7 @@ import multer from 'multer';
 import { limiter, userLimiter } from '../libs/rateLimiter';
 import { requireQloo } from '../middlewares/requireQloo.middleware';
 import * as wantsController from '../controllers/wants.controllers';
+import * as matchesController from '../controllers/matches.controllers';
 
 const upload = multer({
    storage: multer.memoryStorage(),
@@ -93,6 +94,13 @@ router.put(
    requireAuth,
    userLimiter(60),
    wantsController.setItemWants,
+);
+router.get(
+   '/:id/matches',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   matchesController.itemMatches,
 );
 router.patch(
    '/:id/valuation/override',

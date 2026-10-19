@@ -4,6 +4,7 @@ import z from 'zod';
 import { db } from '../config/db.config';
 import { getWantSuggestions } from '../services/wantSuggestions.service';
 import { setWants, wantsBodySchema } from '../services/wants.service';
+import { queueMatchRefresh } from '../services/matchRefresh.service';
 
 // ============================================================================
 // Wants endpoints (Phase 4b, Section 16.5). Mounted behind requireQloo, so
@@ -88,6 +89,7 @@ export async function setItemWants(req: Request, res: Response) {
          message: 'The selected category is invalid or inactive.',
       });
    }
+   if (item.status === 'available') await queueMatchRefresh(item.id, 'wants_change');
    return res.status(StatusCodes.OK).json({
       success: true,
       message: 'Wants saved.',

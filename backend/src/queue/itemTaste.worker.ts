@@ -1,6 +1,8 @@
 import { boss } from '../config/queue.config';
 import { isQlooEnabled } from '../config/features.config';
 import { QUEUES } from './queue.names';
+import { db } from '../config/db.config';
+import { queueMatchRefresh } from '../services/matchRefresh.service';
 import {
    enqueueItemTaste,
    type ItemTasteJobData,
@@ -98,6 +100,17 @@ export async function registerItemTasteWorker() {
                );
          }
          logOutcome(itemId, result);
+
+         // New suggestions change tier 2; drafts get matches on publish.
+         if (result.outcome !== 'skipped') {
+            const item = await db.item.findUnique({
+               where: { id: itemId },
+               select: { status: true },
+            });
+            if (item?.status === 'available') {
+               await queueMatchRefresh(itemId, 'taste_done');
+            }
+         }
 
          // Edited while this run was in progress: run once more.
          if (

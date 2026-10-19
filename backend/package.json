@@ -10,7 +10,8 @@
       "lint": "eslint 'src/**/*.ts'",
       "build": "tsc",
       "seed": "tsx prisma/seed.ts",
-      "worker": "tsx src/worker.ts"
+      "worker": "tsx src/worker.ts",
+      "backfill": "tsx src/scripts/backfill-item-taste.ts"
    },
    "keywords": [],
    "author": "",

@@ -348,6 +348,9 @@ export async function publish(
                select: { id: true },
                take: 1,
             },
+            _count: {
+               select: { wants: true },
+            },
          },
       },
    );
@@ -373,6 +376,18 @@ export async function publish(
          success: false,
          message:
             'Add at least one image first.',
+      });
+   // Qloo publish gate (Phase 4b, Section 16.8). With the flag off,
+   // publishing works as before.
+   if (
+      isQlooEnabled() &&
+      item._count.wants === 0
+   )
+      return res.status(422).json({
+         success: false,
+         code: 'WANTS_REQUIRED',
+         message:
+            'Choose at least one category you would accept in exchange.',
       });
 
    const updated = await db.item.update(
@@ -834,6 +849,16 @@ export async function mine(
                take: 1,
             },
             valuation: true,
+            wants: {
+               orderBy: { rank: 'asc' },
+               select: {
+                  categoryId: true,
+                  rank: true,
+                  category: {
+                     select: { name: true },
+                  },
+               },
+            },
          },
          orderBy: [
             { createdAt: 'desc' },
@@ -862,6 +887,15 @@ export async function mine(
          status: item.status,
          is_service: item.isService,
          location: item.location,
+         item_wants: item.desiredTrade,
+         // Ranked wants (Phase 4b, Section 16.8)
+         wants: item.wants.map(
+            (w) => ({
+               category_id: w.categoryId,
+               name: w.category.name,
+               rank: w.rank,
+            }),
+         ),
          primary_image:
             item.images[0]?.url ?? null,
          valuation: formatValuation(

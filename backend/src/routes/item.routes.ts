@@ -87,6 +87,13 @@ router.get(
    userLimiter(60),
    wantsController.wantSuggestions,
 );
+router.put(
+   '/:id/wants',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   wantsController.setItemWants,
+);
 router.patch(
    '/:id/valuation/override',
    requireAuth,

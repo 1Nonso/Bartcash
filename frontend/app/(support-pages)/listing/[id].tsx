@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -31,6 +32,7 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
+  retryItemValuation,
 } from "@/config/items";
 import { getStoredUser } from "@/config/auth";
 
@@ -39,6 +41,7 @@ type ConfidenceLevel = "high" | "medium" | "low";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_WIDTH * 0.72;
 const POLL_INTERVAL = 5000;
+const POLL_TIMEOUT_MS = 60000; // Stop polling after 60s
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,9 +112,18 @@ function CarouselDot({ active }: { active: boolean }) {
 
 interface ValuationCardProps {
   valuation: ItemValuationDetail | null;
+  /** Owner of a failed valuation: show the Retry button. */
+  canRetry?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
-function ValuationCard({ valuation }: ValuationCardProps) {
+function ValuationCard({
+  valuation,
+  canRetry,
+  retrying,
+  onRetry,
+}: ValuationCardProps) {
   const theme = useAuthTheme();
   const range = formatValuationRange(valuation);
   const confidenceLevel = normalizeConfidence(valuation?.confidence ?? null);
@@ -141,10 +153,29 @@ function ValuationCard({ valuation }: ValuationCardProps) {
           <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
-          {valuation?.failed_reason
-            ? "Valuation failed. Owner can retry."
+          {valuation?.status === "failed"
+            ? "Valuation failed."
             : "Value estimate unavailable."}
         </Text>
+        {canRetry && (
+          <TouchableOpacity
+            style={[styles.retryBtn, { borderColor: theme.borderDefault }]}
+            onPress={onRetry}
+            disabled={retrying}
+            activeOpacity={0.85}
+          >
+            {retrying ? (
+              <ActivityIndicator size="small" color={theme.ai} />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={14} color={theme.ai} />
+                <Text style={[styles.retryBtnText, { color: theme.ai }]}>
+                  Retry valuation
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -318,8 +349,10 @@ export default function ListingDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentAnim = useAnimatedValue(0);
 
   // ── handleBack is now correctly inside the component ──────────────────────
@@ -342,6 +375,10 @@ export default function ListingDetailScreen() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
   }, []);
 
   const startValuationPolling = useCallback((itemId: string) => {
@@ -357,6 +394,17 @@ export default function ListingDetailScreen() {
         stopValuationPolling();
       }
     }, POLL_INTERVAL);
+
+    // Safety timeout — if still pending after 60s, show it as failed so the
+    // owner gets the Retry button instead of an endless spinner.
+    pollTimeoutRef.current = setTimeout(() => {
+      stopValuationPolling();
+      setItem((prev) =>
+        prev?.valuation?.status === "pending"
+          ? { ...prev, valuation: { ...prev.valuation, status: "failed" } }
+          : prev,
+      );
+    }, POLL_TIMEOUT_MS);
   }, [stopValuationPolling]);
 
   const fetchItem = useCallback(async () => {
@@ -396,6 +444,27 @@ export default function ListingDetailScreen() {
 
   const isOwner = item ? item.owner.id === currentUserId : false;
   const canProposeTrade = !isOwner && item?.status === "available";
+
+  const handleRetryValuation = useCallback(async () => {
+    if (!item) return;
+    setRetrying(true);
+    try {
+      await retryItemValuation(item.id);
+      setItem((prev) =>
+        prev?.valuation
+          ? { ...prev, valuation: { ...prev.valuation, status: "pending" } }
+          : prev,
+      );
+      startValuationPolling(item.id);
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err.response?.data?.message ?? "Could not retry valuation.",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  }, [item, startValuationPolling]);
 
   const handleShare = useCallback(async () => {
     if (!item) return;
@@ -609,7 +678,12 @@ export default function ListingDetailScreen() {
             </Text>
           </View>
 
-          <ValuationCard valuation={item.valuation} />
+          <ValuationCard
+            valuation={item.valuation}
+            canRetry={isOwner && item.valuation?.status === "failed"}
+            retrying={retrying}
+            onRetry={handleRetryValuation}
+          />
 
           {item.description && (
             <View
@@ -877,6 +951,17 @@ const styles = StyleSheet.create({
   },
   valuationSubtitle: { ...Typography.caption, marginBottom: Spacing[3] },
   valuationUnavailable: { ...Typography.body },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    borderWidth: Layout.borderWidth,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing[2],
+    marginTop: Spacing[3],
+  },
+  retryBtnText: { ...Typography.captionMedium },
   valuationPending: {
     flexDirection: "row",
     alignItems: "center",

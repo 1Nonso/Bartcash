@@ -18,6 +18,7 @@ import {
   FlatList,
   Image,
   Keyboard,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -228,7 +229,17 @@ function FilterChip({ label, selected, onPress }: FilterChipProps) {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-export default function SearchScreen() {
+/**
+ * mode "discover" (UI spec §13.5, flag on): the same screen as the Discover
+ * tab — shows the full listing feed when there is no query or filter, no
+ * auto-focus, pull to refresh. Search itself is unchanged.
+ */
+export default function SearchScreen({
+  mode = "search",
+}: {
+  mode?: "search" | "discover";
+}) {
+  const discover = mode === "discover";
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -261,12 +272,13 @@ export default function SearchScreen() {
     { label: "Poor", value: "poor" },
   ];
 
-  // Auto-focus input
+  // Auto-focus input (not on Discover, where the feed comes first)
   useFocusEffect(
     useCallback(() => {
+      if (discover) return;
       const t = setTimeout(() => inputRef.current?.focus(), 200);
       return () => clearTimeout(t);
-    }, []),
+    }, [discover]),
   );
 
   const loadCategories = async () => {
@@ -307,7 +319,7 @@ export default function SearchScreen() {
       cursor?: string,
     ) => {
       const myId = ++requestId.current;
-      if (!q.trim() && !catId && !cond) {
+      if (!discover && !q.trim() && !catId && !cond) {
         setResults([]);
         setHasSearched(false);
         setLoading(false);
@@ -336,7 +348,9 @@ export default function SearchScreen() {
         setError(null);
       } catch {
         if (myId !== requestId.current) return;
-        setError("Search failed. Please try again.");
+        setError(
+          discover ? "Failed to load listings." : "Search failed. Please try again.",
+        );
         setHasSearched(true);
       } finally {
         if (myId === requestId.current) {
@@ -345,8 +359,20 @@ export default function SearchScreen() {
         }
       }
     },
-    [],
+    [discover],
   );
+
+  // Discover: load the feed on mount; pull to refresh reloads the current view.
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
+    if (discover) performSearch("", null, null);
+  }, [discover, performSearch]);
+  const handlePullRefresh = useCallback(async () => {
+    setPullRefreshing(true);
+    await performSearch(query, selectedCategory, selectedCondition);
+    setPullRefreshing(false);
+  }, [performSearch, query, selectedCategory, selectedCondition]);
 
   // Debounced search on query change
   const handleQueryChange = useCallback(
@@ -390,10 +416,14 @@ export default function SearchScreen() {
     setQuery("");
     setSelectedCategory(null);
     setSelectedCondition(null);
+    if (discover) {
+      performSearch("", null, null);
+      return;
+    }
     setResults([]);
     setHasSearched(false);
     inputRef.current?.focus();
-  }, []);
+  }, [discover, performSearch]);
 
   const handleLoadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -443,7 +473,9 @@ export default function SearchScreen() {
       <View style={styles.emptyState}>
         <Ionicons name="search-outline" size={48} color={Colors.gray[300]} />
         <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-          No results found
+          {discover && !query.trim() && activeFiltersCount === 0
+            ? "No listings yet"
+            : "No results found"}
         </Text>
         <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
           Try different keywords or adjust your filters
@@ -458,6 +490,8 @@ export default function SearchScreen() {
   }, [
     loading,
     hasSearched,
+    discover,
+    query,
     theme.textPrimary,
     theme.textMuted,
     activeFiltersCount,
@@ -494,6 +528,11 @@ export default function SearchScreen() {
           },
         ]}
       >
+        {discover && (
+          <Text style={[styles.discoverTitle, { color: theme.textPrimary }]}>
+            Discover
+          </Text>
+        )}
         <View style={styles.searchRow}>
           {/* Input */}
           <View
@@ -692,6 +731,15 @@ export default function SearchScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
+            refreshControl={
+              discover ? (
+                <RefreshControl
+                  refreshing={pullRefreshing}
+                  onRefresh={handlePullRefresh}
+                  tintColor={theme.ai}
+                />
+              ) : undefined
+            }
           />
         )}
       </Animated.View>
@@ -703,6 +751,11 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  discoverTitle: {
+    ...Typography.pageTitle,
+    marginBottom: Spacing[3],
+  },
 
   // Search header
   searchHeader: {

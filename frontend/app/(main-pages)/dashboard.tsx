@@ -19,7 +19,8 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
+import { useFeatures } from "@/hooks/useFeatures";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -211,6 +212,15 @@ function CategoryChip({ label, selected, onPress }: CategoryChipProps) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
+  const theme = useAuthTheme();
+  const { qloo, loading } = useFeatures();
+  // Flag on: Home replaces this screen; sign-in and other links still land here.
+  if (loading) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
+  if (qloo) return <Redirect href="/(main-pages)/home" />;
+  return <BrowseScreen />;
+}
+
+function BrowseScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
 

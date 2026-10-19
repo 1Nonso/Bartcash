@@ -11,6 +11,7 @@ import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing } from "@/constants";
 import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFeatures } from "@/hooks/useFeatures";
 
 // ─── Sell Button — elevated center tab ───────────────────────────────────────
 function SellTabButton({
@@ -41,6 +42,9 @@ function SellTabButton({
 export default function TabLayout() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  // Flag on (UI spec §13.3): Home and Discover replace Home / Browse and
+  // Search, which stay registered (hidden) so the flag off restores them.
+  const { qloo } = useFeatures();
 
   return (
     <Tabs
@@ -64,9 +68,10 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="home"
         options={{
           title: "Home",
+          href: qloo ? undefined : null,
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
@@ -77,9 +82,38 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "Home",
+          href: qloo ? null : undefined,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={22}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: "Discover",
+          href: qloo ? undefined : null,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons
+              name={focused ? "compass" : "compass-outline"}
+              size={22}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="search"
         options={{
           title: "Search",
+          href: qloo ? null : undefined,
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
               name={focused ? "search" : "search-outline"}

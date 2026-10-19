@@ -13,7 +13,9 @@ import {
 } from '../utils/storage.utils';
 import { pushTokenSchema } from '../validators/user.validators';
 import { randomBytes } from 'node:crypto';
-import { warn } from 'node:console';
+import { getTasteSummary } from '../services/taste.service';
+import { deleteTasteData } from '../services/tasteCleanup';
+import { qlooConfig } from '../config/qloo.config';
 
 class DeletionBlockedError extends Error {
    constructor(
@@ -29,30 +31,40 @@ export async function getProfile(
    req: Request,
    res: Response,
 ) {
-   const user =
-      await db.user.findUnique({
-         where: { id: req.userId! },
-         select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            profilePhoto: true,
-            bio: true,
-            location: true,
-            averageRating: true,
-            totalTrades: true,
-            emailVerifiedAt: true,
-            createdAt: true,
-         },
-      });
+   const [user, taste] =
+      await Promise.all([
+         db.user.findUnique({
+            where: { id: req.userId! },
+            select: {
+               id: true,
+               firstName: true,
+               lastName: true,
+               email: true,
+               profilePhoto: true,
+               bio: true,
+               location: true,
+               averageRating: true,
+               totalTrades: true,
+               emailVerifiedAt: true,
+               createdAt: true,
+            },
+         }),
+         getTasteSummary(req.userId!),
+      ]);
 
    return res
       .status(StatusCodes.OK)
       .json({
          success: true,
          message: 'Profile retrieved.',
-         data: { user },
+         data: {
+            user: user
+               ? { ...user, taste }
+               : user,
+            features: {
+               qloo: qlooConfig.enabled,
+            },
+         },
       });
 }
 
@@ -154,7 +166,7 @@ export async function deleteAccount(
             await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
 
             const user =
-               await db.user.findUnique(
+               await tx.user.findUnique(
                   {
                      where: {
                         id: userId,
@@ -352,6 +364,11 @@ export async function deleteAccount(
                },
                data: { deletedAt: now },
             });
+
+            await deleteTasteData(
+               tx,
+               userId,
+            );
 
             // 5. Soft delete + anonymise the user
             avatarToRemove =

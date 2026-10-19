@@ -103,11 +103,13 @@ test('combine renormalises over non-null components', () => {
    assert.equal(combine({ wants: null, taste: null, reciprocal: null, owner: null }, W), 0);
 });
 
-test('Labels: strong >= 0.70, good >= 0.50, tier 3 none', () => {
-   assert.equal(scoreLabel(0.7, 1), 'strong');
-   assert.equal(scoreLabel(0.699, 1), 'good');
-   assert.equal(scoreLabel(0.5, 2), 'good');
-   assert.equal(scoreLabel(0.49, 2), 'possible');
+test('Labels: strong >= 0.85, good >= 0.60, tier 3 none', () => {
+   assert.equal(scoreLabel(0.85, 1), 'strong');
+   assert.equal(scoreLabel(0.849, 1), 'good');
+   // A wanted category alone (W 1, R unknown) is good, not strong.
+   assert.equal(scoreLabel(0.833, 1), 'good');
+   assert.equal(scoreLabel(0.6, 2), 'good');
+   assert.equal(scoreLabel(0.599, 2), 'possible');
    assert.equal(scoreLabel(0.9, 3), null);
 });
 
@@ -183,7 +185,7 @@ test('pickTasteEntities: distinct, in order, signals skipped, capped', () => {
    assert.deepEqual(pickTasteEntities(list, new Set(['S']), 1), ['E1']);
 });
 
-test('tasteScores: rescaled within the set; signal brand 1; missing null', () => {
+test('tasteScores: raw affinity, clamped; signal brand 1; missing null', () => {
    const a = cand(FASH, { entityId: 'A' });
    const b = cand(FASH, { entityId: 'B' });
    const c = cand(FASH, { entityId: 'C' });
@@ -191,21 +193,20 @@ test('tasteScores: rescaled within the set; signal brand 1; missing null', () =>
    const none = cand(FASH, { entityId: null });
    const lost = cand(FASH, { entityId: 'Z' });
    const t = tasteScores([a, b, c, same, none, lost], new Set(['S']), new Map([['A', 0.9], ['B', 0.6], ['C', 0.7]]));
-   assert.deepEqual([...t.values()], [1, 0, 0.333, 1, null, null]);
-   // All equal -> 1.00.
-   const eq = tasteScores([a, b], new Set(), new Map([['A', 0.5], ['B', 0.5]]));
-   assert.deepEqual([...eq.values()], [1, 1]);
+   assert.deepEqual([...t.values()], [0.9, 0.6, 0.7, 1, null, null]);
+   const odd = tasteScores([a, b], new Set(), new Map([['A', 1.2], ['B', -0.1]]));
+   assert.deepEqual([...odd.values()], [1, 0]);
 });
 
-test('rankMatches with T: weights renormalised, source qloo, taste clause', () => {
+test('rankMatches with T: missing T neutral 0.5, source qloo, taste clause', () => {
    const s = source({ entityName: 'Sony' });
    const hi = cand(FASH, { userId: 'u1' }); // W 1, T 1, R .5 -> (0.4+0.3+0.1)/0.9 = .889
    const lo = cand(FASH, { userId: 'u2' }); // W 1, T 0, R .5 -> 0.5/0.9 = .556
-   const nt = cand(FASH, { userId: 'u3' }); // W 1, T null, R .5 -> .833
+   const nt = cand(FASH, { userId: 'u3' }); // W 1, T null (0.5), R .5 -> 0.65/0.9 = .722
    const r = rankMatches(s, [hi, lo, nt], new Map(), W, new Map([[hi.id, 1], [lo.id, 0], [nt.id, null]]));
    assert.deepEqual(r.map((m) => [m.candidateItemId, m.score, m.source]), [
       [hi.id, 0.889, 'qloo'],
-      [nt.id, 0.833, 'fallback'],
+      [nt.id, 0.722, 'fallback'],
       [lo.id, 0.556, 'qloo'],
    ]);
    assert.equal(r[0]!.reason, 'Matches your top want: Fashion · popular with Sony fans');
@@ -240,7 +241,13 @@ test('Explanation: checked results, shared tags, label and source', () => {
 test('rankMatches stores the explanation on every row', () => {
    const r = rankMatches(source(), [cand(FASH), cand(SPORT, { tier: 2 })], new Map(), W);
    assert.ok(r.every((m) => m.explanation.reason === m.reason && m.explanation.source === 'fallback'));
-   assert.equal(r[0]!.explanation.score_label, 'strong');
+   // W 1 and R unknown: 0.833, good.
+   assert.equal(r[0]!.explanation.score_label, 'good');
+});
+
+test('No taste for the set: T dropped, not neutral', () => {
+   const r = rankMatches(source(), [cand(FASH)], new Map(), W, null);
+   assert.equal(r[0]!.score, 0.833);
 });
 
 test('ladderLevel 1 when T was used', () => {

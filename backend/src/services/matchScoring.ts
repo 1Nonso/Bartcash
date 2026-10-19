@@ -17,13 +17,22 @@ export const NOTE_BONUS = 0.1;
  *  unknown owner never outranks one who wants the source item. Stored as null. */
 export const RECIPROCAL_UNKNOWN = 0.5;
 
-export const STRONG_AT = 0.7;
-export const GOOD_AT = 0.5;
+/** Labels: strong needs taste or mutual interest on top of a wanted category
+ *  (a wanted category alone scores 0.833). Re-check on the demo seed. */
+export const STRONG_AT = 0.85;
+export const GOOD_AT = 0.6;
+/** Per-component check results (match_context): strong / partial. */
+export const CHECK_STRONG_AT = 0.7;
+export const CHECK_PARTIAL_AT = 0.4;
 
 /** Candidate brands sent to Qloo in the one insights call. */
 export const MAX_TASTE_ENTITIES = 50;
-/** T at or above this adds the taste clause to the reason. */
-export const TASTE_REASON_AT = 0.7;
+/** T at or above this adds the taste clause to the reason (raw Qloo
+ *  affinity: popular brands sit around 0.8 to 0.95). */
+export const TASTE_REASON_AT = 0.9;
+/** T used for scoring when the set has taste but this candidate has none
+ *  (no brand, or not returned): neutral, like RECIPROCAL_UNKNOWN. Stored as null. */
+export const TASTE_UNKNOWN = 0.5;
 export const REASON_MAX = 140;
 export const SHARED_TAGS_MAX = 6;
 
@@ -196,8 +205,8 @@ export function templateReason(
 /** strong ≥ 0.70, partial ≥ 0.40, none below, unknown when null. */
 export function checkResult(v: number | null): CheckResult {
    if (v === null) return 'unknown';
-   if (v >= STRONG_AT) return 'strong';
-   if (v >= 0.4) return 'partial';
+   if (v >= CHECK_STRONG_AT) return 'strong';
+   if (v >= CHECK_PARTIAL_AT) return 'partial';
    return 'none';
 }
 
@@ -272,27 +281,23 @@ export function pickTasteEntities(
 }
 
 /**
- * Component T per candidate: affinity rescaled within the returned set as
- * (a - min) / (max - min) (1.00 when they are all equal); a candidate whose
- * brand is a signal scores 1.00; no brand or not returned -> null.
+ * Component T per candidate: Qloo's raw affinity (already 0 to 1; a
+ * rescale within the set turned small gaps such as 0.934 vs 0.811 into
+ * 1.00 vs 0.00); a candidate whose brand is a signal scores 1.00; no brand
+ * or not returned -> null.
  */
 export function tasteScores(
    candidates: CandidateInput[],
    signals: Set<string>,
    affinity: Map<string, number>,
 ): Map<string, number | null> {
-   const values = [...affinity.values()];
-   const lo = Math.min(...values);
-   const hi = Math.max(...values);
    const out = new Map<string, number | null>();
    for (const c of candidates) {
       const e = c.entityId;
       if (!e) out.set(c.id, null);
       else if (signals.has(e)) out.set(c.id, 1);
-      else if (affinity.has(e)) {
-         const a = affinity.get(e)!;
-         out.set(c.id, hi > lo ? round3((a - lo) / (hi - lo)) : 1);
-      } else out.set(c.id, null);
+      else if (affinity.has(e)) out.set(c.id, round3(Math.min(1, Math.max(0, affinity.get(e)!))));
+      else out.set(c.id, null);
    }
    return out;
 }
@@ -327,10 +332,12 @@ export function scoreAll(
       const w = noWants ? null : wantsFit(source, c, noteWords);
       const r = noWants ? null : reciprocalFit(source.categoryId, ownerWants.get(c.userId));
       const t = noWants ? null : (taste?.get(c.id) ?? null);
+      // With taste for the set, a missing T is neutral; without it, T is dropped.
+      const tScore = taste ? (t ?? TASTE_UNKNOWN) : null;
       const score = noWants
          ? 0
          : combine(
-              { wants: w, taste: t, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
+              { wants: w, taste: tScore, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
               weights,
            );
       return { c, w, r, t, score };

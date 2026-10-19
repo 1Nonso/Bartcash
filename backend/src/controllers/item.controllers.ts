@@ -26,6 +26,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { isQlooEnabled } from '../config/features.config';
 import {
+   formatOwner,
+   formatValuation,
+} from '../utils/itemFormat';
+import {
    ensureItemTaste,
    queueItemTaste,
    requestItemTaste,
@@ -33,42 +37,6 @@ import {
 import z from 'zod';
 
 const IMAGE_LIMIT = 6;
-
-function formatValuation(
-   valuation: any,
-) {
-   if (!valuation) return null;
-   return {
-      id: valuation.id,
-      value_min: valuation.valueMin,
-      value_max: valuation.valueMax,
-      currency: valuation.currency,
-      confidence: valuation.confidence,
-      status: valuation.status,
-      failed_reason:
-         valuation.failedReason,
-   };
-}
-
-function formatOwner(
-   user: any,
-   { extended = false } = {},
-) {
-   return {
-      id: user.id,
-      first_name: user.firstName,
-      last_name: user.lastName,
-      profile_photo: user.profilePhoto,
-      average_rating:
-         user.averageRating,
-      ...(extended
-         ? {
-              total_trades:
-                 user.totalTrades,
-           }
-         : {}),
-   };
-}
 
 function checkDeclaredValueOutlier(
    declaredValue: number,

@@ -12,7 +12,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -74,11 +74,16 @@ async function fetchProfile(): Promise<UserProfile> {
   return response.data.data.user;
 }
 
-async function fetchMyListings(): Promise<MyListing[]> {
+/** Up to 6 available listings for the strip, plus the total count. */
+async function fetchMyListings(): Promise<{
+  items: MyListing[];
+  total: number;
+}> {
   const response = await api.get("/items/mine", {
     params: { status: "available", limit: 6 },
   });
-  return response.data.data.items;
+  const { items, total } = response.data.data;
+  return { items, total: total ?? items.length };
 }
 
 async function fetchMyRatings(userId: string): Promise<{
@@ -134,6 +139,7 @@ export default function ProfileScreen() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [listings, setListings] = useState<MyListing[]>([]);
+  const [listingsTotal, setListingsTotal] = useState(0);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [totalRatings, setTotalRatings] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -160,27 +166,34 @@ export default function ProfileScreen() {
         friction: 10,
       }),
     ]).start();
-
-    const load = async () => {
-      try {
-        const profileData = await fetchProfile();
-        setProfile(profileData);
-
-        const [listingsData, ratingsData] = await Promise.all([
-          fetchMyListings(),
-          fetchMyRatings(profileData.id),
-        ]);
-        setListings(listingsData);
-        setRatings(ratingsData.ratings);
-        setTotalRatings(ratingsData.total_ratings);
-      } catch {
-        // Non-blocking — profile loaded, sections may be empty
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
   }, [contentAnim, headerAnim]);
+
+  // Reload on every focus: the tab stays mounted, so counts would go stale
+  // after publishing or completing a trade.
+  useFocusEffect(
+    useCallback(() => {
+      const load = async () => {
+        try {
+          const profileData = await fetchProfile();
+          setProfile(profileData);
+
+          const [listingsData, ratingsData] = await Promise.all([
+            fetchMyListings(),
+            fetchMyRatings(profileData.id),
+          ]);
+          setListings(listingsData.items);
+          setListingsTotal(listingsData.total);
+          setRatings(ratingsData.ratings);
+          setTotalRatings(ratingsData.total_ratings);
+        } catch {
+          // Non-blocking — profile loaded, sections may be empty
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
+    }, []),
+  );
 
   // ── Logout ───────────────────────────────────────────────────────────────────
 
@@ -344,7 +357,7 @@ export default function ProfileScreen() {
             style={[styles.statsRow, { borderTopColor: theme.borderSubtle }]}
           >
             {[
-              { label: "Listings", value: listings.length.toString() },
+              { label: "Listings", value: listingsTotal.toString() },
               { label: "Trades", value: profile.totalTrades.toString() },
               { label: "Reviews", value: totalRatings.toString() },
             ].map((stat, i) => (
@@ -407,7 +420,7 @@ export default function ProfileScreen() {
               {
                 icon: "cube-outline",
                 label: "My Listings",
-                count: listings.length,
+                count: listingsTotal,
                 onPress: () =>
                   router.push("/(support-pages)/listing/my-listings"),
               },

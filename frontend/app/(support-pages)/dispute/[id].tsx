@@ -374,12 +374,12 @@ export default function DisputeDetailScreen() {
         {/* ── What happens next (only if open/under review) ── */}
         {(dispute.status === "open" || dispute.status === "under_review") && (
           <View
-            style={[styles.infoCard, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.infoCard, { backgroundColor: theme.aiSurface }]}
           >
-            <Text style={[styles.infoTitle, { color: Colors.ai }]}>
+            <Text style={[styles.infoTitle, { color: theme.ai }]}>
               What happens next?
             </Text>
-            <Text style={[styles.infoBody, { color: Colors.ai }]}>
+            <Text style={[styles.infoBody, { color: theme.ai }]}>
               Our team will review this dispute and contact both parties. The
               trade will remain paused until the dispute is resolved or closed.
               Thank you for your patience.

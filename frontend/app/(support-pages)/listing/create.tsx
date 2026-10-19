@@ -738,17 +738,17 @@ export default function CreateListingScreen() {
                   style={[
                     styles.proTip,
                     {
-                      backgroundColor: Colors.aiSurface,
-                      borderColor: Colors.aiLight,
+                      backgroundColor: theme.aiSurface,
+                      borderColor: theme.aiLight,
                     },
                   ]}
                 >
                   <Ionicons
                     name="information-circle-outline"
                     size={14}
-                    color={Colors.ai}
+                    color={theme.ai}
                   />
-                  <Text style={[styles.proTipText, { color: Colors.ai }]}>
+                  <Text style={[styles.proTipText, { color: theme.ai }]}>
                     Pro tip: Being specific about what you want increases your match
                     quality
                   </Text>

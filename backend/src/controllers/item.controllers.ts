@@ -802,6 +802,8 @@ export async function mine(
       allowedStatuses.includes(status)
    )
       where.status = status;
+   // Copied before the cursor narrows it: total counts every match.
+   const countWhere = { ...where };
 
    if (cursor) {
       const c = decodeCursor(cursor);
@@ -838,8 +840,8 @@ export async function mine(
       ];
    }
 
-   const items = await db.item.findMany(
-      {
+   const [items, total] = await Promise.all([
+      db.item.findMany({
          where,
          include: {
             images: {
@@ -865,8 +867,9 @@ export async function mine(
             { id: 'desc' },
          ],
          take: limit + 1,
-      },
-   );
+      }),
+      db.item.count({ where: countWhere }),
+   ]);
 
    const hasMore = items.length > limit;
    const page = items.slice(0, limit);
@@ -914,6 +917,7 @@ export async function mine(
          data: {
             items: formatted,
             next_cursor: nextCursor,
+            total,
          },
       });
 }

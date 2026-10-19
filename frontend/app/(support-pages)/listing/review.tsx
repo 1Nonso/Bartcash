@@ -93,7 +93,7 @@ export default function ReviewListingScreen() {
     { label: string; bars: number; color: string }
   > = {
     high: { label: "High Confidence", bars: 3, color: Colors.success },
-    medium: { label: "Medium Confidence", bars: 2, color: Colors.ai },
+    medium: { label: "Medium Confidence", bars: 2, color: theme.ai },
     low: { label: "Low Confidence", bars: 1, color: Colors.danger },
   };
 
@@ -253,16 +253,16 @@ export default function ReviewListingScreen() {
 
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
 
         {valuation?.status === "pending" && (
           <View style={styles.pendingRow}>
-            <ActivityIndicator size="small" color={Colors.ai} />
+            <ActivityIndicator size="small" color={theme.ai} />
             <Text style={[styles.pendingText, { color: theme.textMuted }]}>
               AI is calculating your item{"'"}s value...
             </Text>
@@ -271,7 +271,7 @@ export default function ReviewListingScreen() {
 
         {valuation?.status === "completed" && aiRange && level && (
           <>
-            <Text style={styles.valuationRange}>{aiRange}</Text>
+            <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{aiRange}</Text>
             <Text style={[styles.valuationSub, { color: theme.textMuted }]}>
               Based on similar items and market data
             </Text>
@@ -290,7 +290,7 @@ export default function ReviewListingScreen() {
                       styles.confidenceBar,
                       {
                         backgroundColor:
-                          i < level.bars ? level.color : Colors.aiLight,
+                          i < level.bars ? level.color : theme.aiLight,
                       },
                     ]}
                   />
@@ -301,15 +301,15 @@ export default function ReviewListingScreen() {
             <View
               style={[
                 styles.confidenceNote,
-                { backgroundColor: Colors.aiLight },
+                { backgroundColor: theme.aiLight },
               ]}
             >
               <Ionicons
                 name="information-circle-outline"
                 size={13}
-                color={Colors.ai}
+                color={theme.ai}
               />
-              <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
+              <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
                 {level.label}
                 {level.bars === 1 ? " — estimate may vary" : ""}
               </Text>
@@ -330,11 +330,11 @@ export default function ReviewListingScreen() {
               activeOpacity={0.85}
             >
               {retrying ? (
-                <ActivityIndicator size="small" color={Colors.ai} />
+                <ActivityIndicator size="small" color={theme.ai} />
               ) : (
                 <>
-                  <Ionicons name="refresh" size={14} color={Colors.ai} />
-                  <Text style={[styles.retryBtnText, { color: Colors.ai }]}>
+                  <Ionicons name="refresh" size={14} color={theme.ai} />
+                  <Text style={[styles.retryBtnText, { color: theme.ai }]}>
                     Retry valuation
                   </Text>
                 </>
@@ -349,7 +349,7 @@ export default function ReviewListingScreen() {
             { borderTopColor: theme.borderSubtle },
           ]}
         />
-        <Text style={[styles.overrideLabelText, { color: Colors.ai }]}>
+        <Text style={[styles.overrideLabelText, { color: theme.ai }]}>
           Please declare a Value for your good below
         </Text>
         <Text
@@ -679,13 +679,12 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
     marginBottom: Spacing[3],
   },
-  valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  valuationTitle: { ...Typography.bodyMedium },
   pendingRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
   pendingText: { ...Typography.body },
   valuationRange: {
     fontSize: 28,
     fontWeight: "700",
-    color: Colors.text.primary,
     marginBottom: Spacing[1],
   },
   valuationSub: { ...Typography.caption, marginBottom: Spacing[3] },

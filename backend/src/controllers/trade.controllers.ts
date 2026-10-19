@@ -306,17 +306,6 @@ export async function create(
             }
          }
 
-         await tx.item.updateMany({
-            where: {
-               id: {
-                  in: itemIdsToLock,
-               },
-            },
-            data: {
-               status: 'in_trade',
-            },
-         });
-
          const { count } =
             await tx.item.updateMany({
                where: {
@@ -335,7 +324,7 @@ export async function create(
          )
             throw createHttpError(
                422,
-               'One or more items are longer available.',
+               'One or more items are no longer available.',
             );
 
          await tx.tradeOffer.create({
@@ -1255,34 +1244,47 @@ export async function complete(
       ).map((ti) => ti.itemId);
       const completedAt = new Date();
 
-      await db.$transaction([
-         db.trade.update({
-            where: { id },
+      // Only the request that moves the trade out of accepted completes
+      // it, so a simultaneous confirm from both sides counts it once.
+      const completedNow = await db.$transaction(async (tx) => {
+         const moved = await tx.trade.updateMany({
+            where: { id, status: 'accepted' },
             data: {
                status: 'completed',
                completedAt,
             },
-         }),
-         db.item.updateMany({
+         });
+         if (moved.count === 0) return false;
+         await tx.item.updateMany({
             where: {
                id: { in: itemIds },
             },
             data: { status: 'traded' },
-         }),
-         db.transaction.update({
+         });
+         await tx.transaction.update({
             where: { tradeId: id },
             data: {
                status: 'completed',
                completedAt,
             },
-         }),
-      ]);
+         });
+         // total_trades is the count of completed trades (D-40).
+         await tx.user.updateMany({
+            where: {
+               id: {
+                  in: [trade.proposerId, trade.receiverId],
+               },
+            },
+            data: { totalTrades: { increment: 1 } },
+         });
+         return true;
+      });
       updated = {
          ...updated,
          status: 'completed',
       };
       // TODO: Notification + push dispatch to both parties (type: trade_completed)
-      await notify(
+      if (completedNow) await notify(
          [
             trade.proposerId,
             trade.receiverId,

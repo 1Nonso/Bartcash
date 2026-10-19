@@ -387,8 +387,8 @@ export default function RaiseDisputeScreen() {
         </View>
 
         {/* What happens next */}
-        <View style={[styles.infoCard, { backgroundColor: Colors.aiSurface }]}>
-          <Text style={[styles.infoTitle, { color: Colors.ai }]}>
+        <View style={[styles.infoCard, { backgroundColor: theme.aiSurface }]}>
+          <Text style={[styles.infoTitle, { color: theme.ai }]}>
             What happens next?
           </Text>
           {[
@@ -399,11 +399,11 @@ export default function RaiseDisputeScreen() {
           ].map((step, i) => (
             <View key={i} style={styles.infoStep}>
               <View
-                style={[styles.infoStepNum, { backgroundColor: Colors.ai }]}
+                style={[styles.infoStepNum, { backgroundColor: theme.ai }]}
               >
                 <Text style={styles.infoStepNumText}>{i + 1}</Text>
               </View>
-              <Text style={[styles.infoStepText, { color: Colors.ai }]}>
+              <Text style={[styles.infoStepText, { color: theme.ai }]}>
                 {step}
               </Text>
             </View>

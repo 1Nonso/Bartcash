@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -31,6 +32,7 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
+  retryItemValuation,
 } from "@/config/items";
 import { getStoredUser } from "@/config/auth";
 
@@ -39,6 +41,8 @@ type ConfidenceLevel = "high" | "medium" | "low";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_WIDTH * 0.72;
 const POLL_INTERVAL = 5000;
+// The valuation job retries 3 times with backoff, which can take over 2 min.
+const POLL_TIMEOUT_MS = 180000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,9 +113,21 @@ function CarouselDot({ active }: { active: boolean }) {
 
 interface ValuationCardProps {
   valuation: ItemValuationDetail | null;
+  /** Only the owner sees "Calculating value..."; others see unavailable. */
+  isOwner: boolean;
+  /** Owner of a failed valuation: show the Retry button. */
+  canRetry?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
-function ValuationCard({ valuation }: ValuationCardProps) {
+function ValuationCard({
+  valuation,
+  isOwner,
+  canRetry,
+  retrying,
+  onRetry,
+}: ValuationCardProps) {
   const theme = useAuthTheme();
   const range = formatValuationRange(valuation);
   const confidenceLevel = normalizeConfidence(valuation?.confidence ?? null);
@@ -131,20 +147,43 @@ function ValuationCard({ valuation }: ValuationCardProps) {
     }
   }, [confidenceFill, isOverride, progressAnim, valuation?.status]);
 
-  if (!valuation || valuation.status === "failed") {
+  if (
+    !valuation ||
+    valuation.status === "failed" ||
+    (valuation.status === "pending" && !isOwner)
+  ) {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
-          {valuation?.failed_reason
-            ? "Valuation failed. Owner can retry."
+          {valuation?.status === "failed"
+            ? "Valuation failed."
             : "Value estimate unavailable."}
         </Text>
+        {canRetry && (
+          <TouchableOpacity
+            style={[styles.retryBtn, { borderColor: theme.borderDefault }]}
+            onPress={onRetry}
+            disabled={retrying}
+            activeOpacity={0.85}
+          >
+            {retrying ? (
+              <ActivityIndicator size="small" color={theme.ai} />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={14} color={theme.ai} />
+                <Text style={[styles.retryBtnText, { color: theme.ai }]}>
+                  Retry valuation
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -152,14 +191,14 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (valuation.status === "pending") {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
         </View>
         <View style={styles.valuationPending}>
-          <ActivityIndicator size="small" color={Colors.ai} />
+          <ActivityIndicator size="small" color={theme.ai} />
           <Text
             style={[styles.valuationPendingText, { color: theme.textMuted }]}
           >
@@ -173,25 +212,25 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (isOverride) {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="pricetag-outline" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Owner{"'"}s Estimated Value</Text>
+          <Ionicons name="pricetag-outline" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Owner{"'"}s Estimated Value</Text>
         </View>
-        <Text style={styles.valuationRange}>{range}</Text>
+        <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
         <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
           Set by the item owner
         </Text>
         <View
-          style={[styles.overrideBadge, { backgroundColor: Colors.aiLight }]}
+          style={[styles.overrideBadge, { backgroundColor: theme.aiLight }]}
         >
           <Ionicons
             name="information-circle-outline"
             size={13}
-            color={Colors.ai}
+            color={theme.ai}
           />
-          <Text style={[styles.overrideBadgeText, { color: Colors.ai }]}>
+          <Text style={[styles.overrideBadgeText, { color: theme.ai }]}>
             This value was manually set and may differ from market rates
           </Text>
         </View>
@@ -200,12 +239,12 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   }
 
   return (
-    <View style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}>
+    <View style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}>
       <View style={styles.valuationHeader}>
-        <Ionicons name="sparkles" size={16} color={Colors.ai} />
-        <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+        <Ionicons name="sparkles" size={16} color={theme.ai} />
+        <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
       </View>
-      <Text style={styles.valuationRange}>{range}</Text>
+      <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
       <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
         Based on similar items and market data
       </Text>
@@ -213,18 +252,18 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         <Text style={[styles.confidenceLabel, { color: theme.textMuted }]}>
           Confidence level
         </Text>
-        <Text style={styles.confidenceValue}>
+        <Text style={[styles.confidenceValue, { color: theme.ai }]}>
           {confidenceLevel
             ? confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1)
             : "—"}
         </Text>
       </View>
-      <View style={[styles.progressTrack, { backgroundColor: Colors.aiLight }]}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.aiLight }]}>
         <Animated.View
           style={[
             styles.progressFill,
             {
-              backgroundColor: Colors.ai,
+              backgroundColor: theme.ai,
               width: progressAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: ["0%", "100%"],
@@ -234,14 +273,14 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         />
       </View>
       <View
-        style={[styles.confidenceNote, { backgroundColor: Colors.aiLight }]}
+        style={[styles.confidenceNote, { backgroundColor: theme.aiLight }]}
       >
         <Ionicons
           name="information-circle-outline"
           size={13}
-          color={Colors.ai}
+          color={theme.ai}
         />
-        <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
+        <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
           {confidenceLevel === "high"
             ? "High Confidence — AI is very certain about this value"
             : confidenceLevel === "medium"
@@ -318,8 +357,10 @@ export default function ListingDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentAnim = useAnimatedValue(0);
 
   // ── handleBack is now correctly inside the component ──────────────────────
@@ -342,6 +383,10 @@ export default function ListingDetailScreen() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
   }, []);
 
   const startValuationPolling = useCallback((itemId: string) => {
@@ -354,19 +399,37 @@ export default function ListingDetailScreen() {
           setItem((prev) => (prev ? { ...prev, valuation } : prev));
         }
       } catch {
-        stopValuationPolling();
+        // Keep polling through network blips; the timeout below ends it.
       }
     }, POLL_INTERVAL);
+
+    // Safety timeout — if still pending after 3 min, show it as failed so the
+    // owner gets the Retry button instead of an endless spinner.
+    pollTimeoutRef.current = setTimeout(() => {
+      stopValuationPolling();
+      setItem((prev) =>
+        prev?.valuation?.status === "pending"
+          ? { ...prev, valuation: { ...prev.valuation, status: "failed" } }
+          : prev,
+      );
+    }, POLL_TIMEOUT_MS);
   }, [stopValuationPolling]);
 
   const fetchItem = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await getItemById(id);
+      const [data, user] = await Promise.all([
+        getItemById(id),
+        getStoredUser(),
+      ]);
       setItem(data);
       setError(null);
 
-      if (data.valuation?.status === "pending") {
+      // Only the owner watches a pending valuation; others see it as unavailable.
+      if (
+        data.valuation?.status === "pending" &&
+        data.owner.id === user?.id
+      ) {
         startValuationPolling(id);
       }
 
@@ -396,6 +459,27 @@ export default function ListingDetailScreen() {
 
   const isOwner = item ? item.owner.id === currentUserId : false;
   const canProposeTrade = !isOwner && item?.status === "available";
+
+  const handleRetryValuation = useCallback(async () => {
+    if (!item) return;
+    setRetrying(true);
+    try {
+      await retryItemValuation(item.id);
+      setItem((prev) =>
+        prev?.valuation
+          ? { ...prev, valuation: { ...prev.valuation, status: "pending" } }
+          : prev,
+      );
+      startValuationPolling(item.id);
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err.response?.data?.message ?? "Could not retry valuation.",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  }, [item, startValuationPolling]);
 
   const handleShare = useCallback(async () => {
     if (!item) return;
@@ -609,7 +693,13 @@ export default function ListingDetailScreen() {
             </Text>
           </View>
 
-          <ValuationCard valuation={item.valuation} />
+          <ValuationCard
+            valuation={item.valuation}
+            isOwner={isOwner}
+            canRetry={isOwner && item.valuation?.status === "failed"}
+            retrying={retrying}
+            onRetry={handleRetryValuation}
+          />
 
           {item.description && (
             <View
@@ -868,16 +958,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing[2],
   },
-  valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  valuationTitle: { ...Typography.bodyMedium },
   valuationRange: {
     ...Typography.cardTitleLarge,
-    color: Colors.text.primary,
     fontSize: 28,
     marginBottom: Spacing[1],
     paddingTop: Spacing[3],
   },
   valuationSubtitle: { ...Typography.caption, marginBottom: Spacing[3] },
   valuationUnavailable: { ...Typography.body },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    borderWidth: Layout.borderWidth,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing[2],
+    marginTop: Spacing[3],
+  },
+  retryBtnText: { ...Typography.captionMedium },
   valuationPending: {
     flexDirection: "row",
     alignItems: "center",
@@ -891,7 +991,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[2],
   },
   confidenceLabel: { ...Typography.caption },
-  confidenceValue: { ...Typography.captionMedium, color: Colors.ai },
+  confidenceValue: { ...Typography.captionMedium },
   progressTrack: {
     height: 6,
     borderRadius: Radius.full,

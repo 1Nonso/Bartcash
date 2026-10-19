@@ -116,7 +116,7 @@ function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
         </Text>
         {valuation && (
           <View style={styles.valuationRow}>
-            <Ionicons name="trending-up" size={11} color={Colors.ai} />
+            <Ionicons name="trending-up" size={11} color={theme.ai} />
             <Text style={styles.valuationText}>{valuation}</Text>
           </View>
         )}
@@ -417,7 +417,7 @@ export default function ProposeTradeScreen() {
           </Text>
           {receiverValuation && (
             <View style={styles.valuationRow}>
-              <Ionicons name="trending-up" size={13} color={Colors.ai} />
+              <Ionicons name="trending-up" size={13} color={theme.ai} />
               <Text style={styles.valuationText}>{receiverValuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
                 · AI Value
@@ -739,11 +739,11 @@ export default function ProposeTradeScreen() {
         {/* ── AI Match Score ── */}
         {score !== null && (
           <View
-            style={[styles.matchCard, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.matchCard, { backgroundColor: theme.aiSurface }]}
           >
             <View style={styles.matchHeader}>
-              <Ionicons name="sparkles" size={16} color={Colors.ai} />
-              <Text style={styles.matchTitle}>AI Estimated Value</Text>
+              <Ionicons name="sparkles" size={16} color={theme.ai} />
+              <Text style={[styles.matchTitle, { color: theme.ai }]}>AI Estimated Value</Text>
             </View>
 
             <View style={styles.matchValues}>
@@ -798,20 +798,20 @@ export default function ProposeTradeScreen() {
               <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>
                 Trade match score
               </Text>
-              <Text style={[styles.scoreValue, { color: Colors.ai }]}>
+              <Text style={[styles.scoreValue, { color: theme.ai }]}>
                 {score}%
               </Text>
             </View>
             <View
               style={[
                 styles.progressTrack,
-                { backgroundColor: Colors.aiLight },
+                { backgroundColor: theme.aiLight },
               ]}
             >
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${score}%`, backgroundColor: Colors.ai },
+                  { width: `${score}%`, backgroundColor: theme.ai },
                 ]}
               />
             </View>
@@ -1031,7 +1031,7 @@ const styles = StyleSheet.create({
     gap: Spacing[3],
   },
   matchHeader: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
-  matchTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  matchTitle: { ...Typography.bodyMedium },
   matchValues: { flexDirection: "row", gap: Spacing[4] },
   matchValueItem: { flex: 1, gap: 4 },
   matchValueLabel: { ...Typography.caption },

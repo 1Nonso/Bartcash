@@ -46,6 +46,11 @@ export function useAuthTheme() {
     // Card
     cardBorder: isDark ? "#3D3847" : Colors.border.default,
 
+    // AI / Scout panels (Colors.ai* are light-only)
+    ai: isDark ? "#D0BCFF" : Colors.ai,
+    aiLight: isDark ? "#3B2F5C" : Colors.aiLight,
+    aiSurface: isDark ? "#2A2438" : Colors.aiSurface,
+
     // Semantic
     error: Colors.danger,
     errorBg: isDark ? "#2D1A1A" : Colors.dangerLight,

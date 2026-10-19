@@ -176,6 +176,8 @@ export default function WantPicker({
   }, [picked, suggestions, categories]);
 
   const isScout = data?.source === "qloo";
+  // Reason text on a selected (inverted) card.
+  const selectedReason = theme.isDark ? Colors.ai : Colors.aiLight;
 
   // ── Cards ──────────────────────────────────────────────────────────────────
 
@@ -189,8 +191,8 @@ export default function WantPicker({
         style={[
           styles.card,
           {
-            backgroundColor: selected ? Colors.primary : theme.surface,
-            borderColor: selected ? Colors.primary : theme.cardBorder,
+            backgroundColor: selected ? theme.btnPrimary : theme.surface,
+            borderColor: selected ? theme.btnPrimary : theme.cardBorder,
             opacity: blocked || disabled ? 0.45 : 1,
           },
         ]}
@@ -202,20 +204,24 @@ export default function WantPicker({
           <Ionicons
             name={iconFor(category)}
             size={18}
-            color={selected ? Colors.white : theme.textPrimary}
+            color={selected ? theme.btnPrimaryText : theme.textPrimary}
           />
           <Text
             style={[
               styles.cardName,
-              { color: selected ? Colors.white : theme.textPrimary },
+              { color: selected ? theme.btnPrimaryText : theme.textPrimary },
             ]}
             numberOfLines={1}
           >
             {category.name}
           </Text>
           {selected && (
-            <View style={styles.rankBadge}>
-              <Text style={styles.rankText}>{rank}</Text>
+            <View
+              style={[styles.rankBadge, { backgroundColor: theme.btnPrimaryText }]}
+            >
+              <Text style={[styles.rankText, { color: theme.btnPrimary }]}>
+                {rank}
+              </Text>
             </View>
           )}
         </View>
@@ -223,7 +229,7 @@ export default function WantPicker({
           <Text
             style={[
               styles.cardReason,
-              { color: selected ? Colors.aiLight : Colors.ai },
+              { color: selected ? selectedReason : theme.ai },
             ]}
             numberOfLines={2}
           >
@@ -239,7 +245,7 @@ export default function WantPicker({
       return (
         <>
           <View style={styles.pendingRow}>
-            <ActivityIndicator size="small" color={Colors.ai} />
+            <ActivityIndicator size="small" color={theme.ai} />
             <Text style={[styles.pendingText, { color: theme.textMuted }]}>
               Scout is thinking...
             </Text>
@@ -247,7 +253,7 @@ export default function WantPicker({
           {[0, 1, 2, 3, 4].map((i) => (
             <View
               key={i}
-              style={[styles.skeleton, { backgroundColor: Colors.aiLight }]}
+              style={[styles.skeleton, { backgroundColor: theme.aiLight }]}
             />
           ))}
         </>
@@ -266,8 +272,8 @@ export default function WantPicker({
             onPress={retry}
             activeOpacity={0.85}
           >
-            <Ionicons name="refresh" size={14} color={Colors.ai} />
-            <Text style={[styles.retryText, { color: Colors.ai }]}>Retry</Text>
+            <Ionicons name="refresh" size={14} color={theme.ai} />
+            <Text style={[styles.retryText, { color: theme.ai }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       );
@@ -283,9 +289,9 @@ export default function WantPicker({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors.aiSurface }]}>
+    <View style={[styles.container, { backgroundColor: theme.aiSurface }]}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: Colors.text.primary }]}>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>
           What would you take in exchange?
         </Text>
       </View>
@@ -293,16 +299,16 @@ export default function WantPicker({
         <Text style={[styles.sub, { color: theme.textMuted }]}>
           Pick up to 3, most wanted first.
         </Text>
-        <Text style={[styles.count, { color: Colors.ai }]}>
+        <Text style={[styles.count, { color: theme.ai }]}>
           {picked.length} of {MAX_PICKS}
         </Text>
       </View>
 
       {state === "ready" &&
         (isScout ? (
-          <View style={styles.scoutBadge}>
-            <Ionicons name="sparkles" size={12} color={Colors.ai} />
-            <Text style={styles.scoutBadgeText}>Scout</Text>
+          <View style={[styles.scoutBadge, { backgroundColor: theme.aiLight }]}>
+            <Ionicons name="sparkles" size={12} color={theme.ai} />
+            <Text style={[styles.scoutBadgeText, { color: theme.ai }]}>Scout</Text>
           </View>
         ) : (
           <Text style={[styles.popular, { color: theme.textMuted }]}>
@@ -322,14 +328,14 @@ export default function WantPicker({
           activeOpacity={0.7}
           style={styles.showAll}
         >
-          <Text style={[styles.showAllText, { color: Colors.ai }]}>
+          <Text style={[styles.showAllText, { color: theme.ai }]}>
             Show all categories
           </Text>
         </TouchableOpacity>
       )}
 
       {/* Note */}
-      <Text style={[styles.noteLabel, { color: Colors.text.primary }]}>
+      <Text style={[styles.noteLabel, { color: theme.textPrimary }]}>
         Anything specific?{" "}
         <Text style={{ color: theme.textMuted }}>(optional)</Text>
       </Text>
@@ -382,7 +388,7 @@ export default function WantPicker({
             <Text style={[styles.title, { color: theme.textPrimary }]}>
               All categories
             </Text>
-            <Text style={[styles.count, { color: Colors.ai }]}>
+            <Text style={[styles.count, { color: theme.ai }]}>
               {picked.length} of {MAX_PICKS}
             </Text>
           </View>
@@ -390,11 +396,13 @@ export default function WantPicker({
             {categories.map((c) => renderCard(c, null))}
           </ScrollView>
           <TouchableOpacity
-            style={[styles.doneBtn, { backgroundColor: Colors.primary }]}
+            style={[styles.doneBtn, { backgroundColor: theme.btnPrimary }]}
             onPress={() => setSheetOpen(false)}
             activeOpacity={0.9}
           >
-            <Text style={styles.doneText}>Done</Text>
+            <Text style={[styles.doneText, { color: theme.btnPrimaryText }]}>
+              Done
+            </Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -423,13 +431,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "flex-start",
     gap: 4,
-    backgroundColor: Colors.aiLight,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing[2],
     paddingVertical: 2,
     marginBottom: Spacing[2],
   },
-  scoutBadgeText: { fontSize: 12, fontWeight: "600", color: Colors.ai },
+  scoutBadgeText: { fontSize: 12, fontWeight: "600" },
   popular: { ...Typography.captionMedium, marginBottom: Spacing[2] },
 
   cards: { gap: Spacing[2] },
@@ -446,11 +453,10 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  rankText: { fontSize: 12, fontWeight: "700", color: Colors.primary },
+  rankText: { fontSize: 12, fontWeight: "700" },
 
   pendingRow: {
     flexDirection: "row",
@@ -503,5 +509,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  doneText: { ...Typography.button, color: Colors.white },
+  doneText: { ...Typography.button },
 });

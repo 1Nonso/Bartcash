@@ -4,12 +4,41 @@ import type {
    NextFunction,
 } from 'express';
 
+/** A malformed uuid in a path or query reaches Postgres as 22P02 (Prisma P2007). */
+function isInvalidUuid(err: any): boolean {
+   return (
+      err?.code === 'P2007' &&
+      err?.meta?.driverAdapterError?.cause
+         ?.originalCode === '22P02'
+   );
+}
+
 export function errorHandler(
    err: Error,
    req: Request,
    res: Response,
    next: NextFunction,
 ) {
+   if (isInvalidUuid(err)) {
+      return res.status(404).json({
+         success: false,
+         message: 'Not found.',
+      });
+   }
+
+   // createHttpError(4xx, message) from a controller keeps its status.
+   const status = (err as any)?.status;
+   if (
+      typeof status === 'number' &&
+      status >= 400 &&
+      status < 500
+   ) {
+      return res.status(status).json({
+         success: false,
+         message: err.message,
+      });
+   }
+
    console.error(err);
 
    return res.status(500).json({

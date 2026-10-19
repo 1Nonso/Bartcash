@@ -41,7 +41,8 @@ type ConfidenceLevel = "high" | "medium" | "low";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_WIDTH * 0.72;
 const POLL_INTERVAL = 5000;
-const POLL_TIMEOUT_MS = 60000; // Stop polling after 60s
+// The valuation job retries 3 times with backoff, which can take over 2 min.
+const POLL_TIMEOUT_MS = 180000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,8 @@ function CarouselDot({ active }: { active: boolean }) {
 
 interface ValuationCardProps {
   valuation: ItemValuationDetail | null;
+  /** Only the owner sees "Calculating value..."; others see unavailable. */
+  isOwner: boolean;
   /** Owner of a failed valuation: show the Retry button. */
   canRetry?: boolean;
   retrying?: boolean;
@@ -120,6 +123,7 @@ interface ValuationCardProps {
 
 function ValuationCard({
   valuation,
+  isOwner,
   canRetry,
   retrying,
   onRetry,
@@ -143,7 +147,11 @@ function ValuationCard({
     }
   }, [confidenceFill, isOverride, progressAnim, valuation?.status]);
 
-  if (!valuation || valuation.status === "failed") {
+  if (
+    !valuation ||
+    valuation.status === "failed" ||
+    (valuation.status === "pending" && !isOwner)
+  ) {
     return (
       <View
         style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
@@ -391,11 +399,11 @@ export default function ListingDetailScreen() {
           setItem((prev) => (prev ? { ...prev, valuation } : prev));
         }
       } catch {
-        stopValuationPolling();
+        // Keep polling through network blips; the timeout below ends it.
       }
     }, POLL_INTERVAL);
 
-    // Safety timeout — if still pending after 60s, show it as failed so the
+    // Safety timeout — if still pending after 3 min, show it as failed so the
     // owner gets the Retry button instead of an endless spinner.
     pollTimeoutRef.current = setTimeout(() => {
       stopValuationPolling();
@@ -410,11 +418,18 @@ export default function ListingDetailScreen() {
   const fetchItem = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await getItemById(id);
+      const [data, user] = await Promise.all([
+        getItemById(id),
+        getStoredUser(),
+      ]);
       setItem(data);
       setError(null);
 
-      if (data.valuation?.status === "pending") {
+      // Only the owner watches a pending valuation; others see it as unavailable.
+      if (
+        data.valuation?.status === "pending" &&
+        data.owner.id === user?.id
+      ) {
         startValuationPolling(id);
       }
 
@@ -680,6 +695,7 @@ export default function ListingDetailScreen() {
 
           <ValuationCard
             valuation={item.valuation}
+            isOwner={isOwner}
             canRetry={isOwner && item.valuation?.status === "failed"}
             retrying={retrying}
             onRetry={handleRetryValuation}

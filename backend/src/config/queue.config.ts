@@ -28,6 +28,10 @@ export async function startQueue(): Promise<PgBoss> {
          QUEUES.ITEM_TASTE,
          { policy: 'short' },
       );
+      await boss.createQueue(
+         QUEUES.MATCH_REFRESH,
+         { policy: 'short' },
+      );
       started = true;
    }
    return boss;

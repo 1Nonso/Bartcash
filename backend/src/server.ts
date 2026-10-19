@@ -4,11 +4,13 @@ import app from './app';
 import config from './config/config';
 import { startQueue } from './config/queue.config';
 import { registerValuationWorker } from './queue/valuation.worker';
+import { registerItemTasteWorker } from './queue/itemTaste.worker';
 
 await startQueue();
 
 if (process.env.RUN_WORKER === 'true') {
    await registerValuationWorker();
+   await registerItemTasteWorker();
 }
 
 app.listen(config.port, () => {

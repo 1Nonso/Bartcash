@@ -20,8 +20,10 @@ import { resetPasswordRedirect } from './controllers/auth.controllers';
 const app = express();
 
 const limiter = rateLimit({
-   windowMs: 1 * 6 * 1000,
-   limit: 100,
+   // Per IP. Generous because many Nigerian mobile users share a carrier IP;
+   // per-user limits live in libs/rateLimiter.ts.
+   windowMs: 60 * 1000,
+   limit: 300,
    message:
       'Too many request. Try again later',
 });

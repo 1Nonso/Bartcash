@@ -1078,7 +1078,7 @@ export default function ChatThreadScreen() {
               {isPreAcceptance
                 ? "Chat unlocks once both parties agree on the trade terms."
                 : "This trade is closed. Messaging is disabled."}
-            </Text>{" "}
+            </Text>
           </View>
         ) : (
           <View style={styles.inputBar}>

@@ -1,3 +1,4 @@
+import { valuationFailureMessage } from '../utils/valuationFailure';
 import type {
    Request,
    Response,
@@ -59,7 +60,9 @@ function formatValuation(
       confidence: valuation.confidence,
       status: valuation.status,
       failed_reason:
-         valuation.failedReason,
+         valuationFailureMessage(
+            valuation.failedReason,
+         ),
    };
 }
 

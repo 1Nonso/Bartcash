@@ -25,6 +25,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import { Colors, Layout, Radius, Shadows, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { timeAgo } from "@/constants/listing";
@@ -65,6 +66,7 @@ function primaryImage(item: MyItem): string | null {
 export default function HomeScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
 
   const [firstName, setFirstName] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
@@ -468,7 +470,7 @@ export default function HomeScreen() {
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyState}
         ListFooterComponent={footer}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: tabSpace }}
         refreshControl={
           <RefreshControl refreshing={pullRefreshing} onRefresh={handlePullRefresh} tintColor={theme.ai} />
         }
@@ -482,7 +484,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  listContent: { paddingBottom: Layout.tabBarHeight + Spacing[4] },
 
   header: { paddingHorizontal: Layout.screenPadding, paddingBottom: Spacing[3] },
   headerTop: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },

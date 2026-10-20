@@ -51,6 +51,12 @@ export function useAuthTheme() {
     aiLight: isDark ? "#3B2F5C" : Colors.aiLight,
     aiSurface: isDark ? "#2A2438" : Colors.aiSurface,
 
+    // Floating tab bar ("liquid glass", simulated: translucent, no blur)
+    glassBg: isDark ? "rgba(36, 33, 43, 0.82)" : "rgba(255, 255, 255, 0.78)",
+    glassBorder: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.95)",
+    glassHighlight: isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(255, 255, 255, 1)",
+    glassActive: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(29, 27, 32, 0.08)",
+
     // Semantic
     error: Colors.danger,
     errorBg: isDark ? "#2D1A1A" : Colors.dangerLight,

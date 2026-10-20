@@ -15,6 +15,7 @@ import commentRoutes from '../src/routes/comment.routes';
 import notificationRoutes from '../src/routes/notification.routes';
 import messageRoutes from '../src/routes/message.routes';
 import tasteRoutes from './routes/taste.routes';
+import scoutRoutes from './routes/scout.routes';
 import { errorHandler } from './middlewares/errorHandler.middleware';
 import { resetPasswordRedirect } from './controllers/auth.controllers';
 
@@ -55,6 +56,7 @@ app.use('/api', commentRoutes); // /items/:id/comments, /comments/:id (before it
 app.use('/api', ratingRoutes); // /ratings, /users/:id/ratings
 app.use('/api/items', itemRoutes);
 app.use('/api/taste', tasteRoutes);
+app.use('/api/scout', scoutRoutes);
 app.use(
    '/api/categories',
    categoryRoutes,

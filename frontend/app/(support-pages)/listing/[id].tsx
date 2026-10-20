@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
+  Pressable,
+  ScrollView,
   Dimensions,
   FlatList,
   Image,
@@ -32,6 +35,7 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
+  getMyItems,
   MatchContext,
   retryItemValuation,
 } from "@/config/items";
@@ -43,6 +47,9 @@ import {
   WantChip,
 } from "@/components/scout";
 import { getStoredUser } from "@/config/auth";
+import { draftOffer, scoutDraftStore } from "@/config/scout";
+import { useFeatures } from "@/hooks/useFeatures";
+import { showToast } from "@/hooks/toast";
 import { InfoButton } from "@/components/guide/InfoSheet";
 import { useTour } from "@/components/guide/Tour";
 
@@ -427,6 +434,11 @@ export default function ListingDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { qloo } = useFeatures();
+  // Viewer's available listings (Draft an offer needs one to offer).
+  const [myAvailable, setMyAvailable] = useState<{ id: string; title: string }[]>([]);
+  const [drafting, setDrafting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -566,6 +578,57 @@ export default function ListingDetailScreen() {
     });
   }, [item]);
 
+  // ── Draft an offer with Scout (UI §13.10, FLOW §10.9) ──────────────────────
+
+  useEffect(() => {
+    if (!qloo || !item || isOwner) return;
+    let live = true;
+    getMyItems({ status: "available", limit: 50 })
+      .then((d) => live && setMyAvailable(d.items.map((i) => ({ id: i.id, title: i.title }))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [qloo, item, isOwner]);
+
+  const canDraft = qloo && !isOwner && item?.status === "available" && myAvailable.length > 0;
+
+  const runDraft = useCallback(
+    async (sourceId: string) => {
+      if (!item || drafting) return;
+      setPickerOpen(false);
+      setDrafting(true);
+      try {
+        const draft = await draftOffer(sourceId, item.id);
+        scoutDraftStore.set(draft);
+        router.push({
+          pathname: "/(support-pages)/trade/[id]/propose",
+          params: { id: item.id, draft: "1" },
+        });
+      } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 422) {
+          showToast("error", "This listing is no longer available.");
+          fetchItem();
+        } else if (status === 429) {
+          showToast("info", "Slow down a moment.");
+        } else {
+          showToast("error", "Scout could not draft that. You can still make an offer yourself.");
+        }
+      } finally {
+        setDrafting(false);
+      }
+    },
+    [item, drafting, fetchItem],
+  );
+
+  const handleDraft = useCallback(() => {
+    // From a Home match: offer that listing. Otherwise ask which one.
+    if (context && myAvailable.some((m) => m.id === context)) return runDraft(context);
+    if (myAvailable.length === 1) return runDraft(myAvailable[0]!.id);
+    setPickerOpen(true);
+  }, [context, myAvailable, runDraft]);
+
   const handleEditListing = useCallback(() => {
     if (!item) return;
     router.push({
@@ -690,7 +753,7 @@ export default function ListingDetailScreen() {
         onScroll={tour.onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + (canDraft ? 156 : 100) }}
         style={{ opacity: contentAnim }}
       >
         {/* Hero carousel */}
@@ -963,6 +1026,28 @@ export default function ListingDetailScreen() {
             <Text style={styles.ctaPrimaryText}>Edit Listing</Text>
           </TouchableOpacity>
         ) : item.status === "traded" ? null : (
+          <>
+          {canDraft && (
+            <TouchableOpacity
+              style={[styles.draftBtn, { backgroundColor: theme.aiLight, borderColor: theme.ai }]}
+              onPress={handleDraft}
+              disabled={drafting}
+              activeOpacity={0.85}
+              accessibilityLabel="Draft an offer with Scout"
+            >
+              {drafting ? (
+                <>
+                  <ActivityIndicator size="small" color={theme.ai} />
+                  <Text style={[styles.draftBtnText, { color: theme.ai }]}>Scout is drafting...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={16} color={theme.ai} />
+                  <Text style={[styles.draftBtnText, { color: theme.ai }]}>Draft an offer with Scout</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
           <View ref={proposeRef} collapsable={false} style={styles.ctaWrap}>
           <TouchableOpacity
             style={[
@@ -984,8 +1069,40 @@ export default function ListingDetailScreen() {
             </Text>
           </TouchableOpacity>
           </View>
+          </>
         )}
       </View>
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setPickerOpen(false)} />
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: theme.bg, paddingBottom: insets.bottom + Spacing[4], borderColor: theme.borderSubtle },
+          ]}
+        >
+          <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>Which listing do you want to offer?</Text>
+          <ScrollView style={styles.sheetList}>
+            {myAvailable.map((m) => (
+              <TouchableOpacity
+                key={m.id}
+                style={[styles.sheetRow, { borderBottomColor: theme.borderSubtle }]}
+                onPress={() => runDraft(m.id)}
+              >
+                <Text numberOfLines={1} style={[styles.sheetRowText, { color: theme.textPrimary }]}>
+                  {m.title}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
       {tour.node}
     </View>
   );
@@ -1201,7 +1318,41 @@ const styles = StyleSheet.create({
     paddingTop: Spacing[3],
     borderTopWidth: 1,
   },
-  ctaWrap: { flex: 1 },
+  ctaWrap: { alignSelf: "stretch" },
+  draftBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    height: 44,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing[2],
+  },
+  draftBtnText: { ...Typography.buttonSm },
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: "70%",
+    borderTopLeftRadius: Radius["3xl"],
+    borderTopRightRadius: Radius["3xl"],
+    borderTopWidth: 1,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing[4],
+  },
+  sheetTitle: { ...Typography.sectionTitle, marginBottom: Spacing[2] },
+  sheetList: { flexGrow: 0 },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sheetRowText: { ...Typography.body, flex: 1 },
   ctaInWrap: { flex: 0 },
   ctaPrimary: {
     flex: 1,

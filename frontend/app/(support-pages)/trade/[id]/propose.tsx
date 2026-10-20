@@ -28,6 +28,7 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { scoutDraftStore, type OfferDraft } from "@/config/scout";
 import { InfoButton } from "@/components/guide/InfoSheet";
 import {
   ItemDetail,
@@ -131,7 +132,10 @@ function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
 export default function ProposeTradeScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
-  const { id: receiverItemId } = useLocalSearchParams<{ id: string }>();
+  // draft=1: opened from "Draft an offer with Scout" (UI §13.11).
+  const { id: receiverItemId, draft: fromDraft } = useLocalSearchParams<{ id: string; draft?: string }>();
+  const [draftedBy, setDraftedBy] = useState<OfferDraft["drafted_by"] | null>(null);
+  const [valueNote, setValueNote] = useState<string | null>(null);
 
   // Data
   const [receiverItem, setReceiverItem] = useState<ItemDetail | null>(null);
@@ -178,6 +182,17 @@ export default function ProposeTradeScreen() {
         ]);
         setReceiverItem(itemData);
         setMyItems(myItemsData.items);
+        // Pre-fill from Scout's draft; every field stays editable.
+        const d = fromDraft === "1" ? scoutDraftStore.take(receiverItemId) : null;
+        if (d) {
+          const mine = new Set(myItemsData.items.map((i) => i.id));
+          setTradeType("item");
+          setSelectedItemIds(d.offered_item_ids.filter((id) => mine.has(id)));
+          setTopUpAmount(d.top_up_amount > 0 ? String(d.top_up_amount) : "");
+          setMessage(d.message);
+          setDraftedBy(d.drafted_by);
+          setValueNote(d.value_note);
+        }
       } catch {
         Alert.alert("Error", "Failed to load listing details.");
         goBack();
@@ -187,7 +202,7 @@ export default function ProposeTradeScreen() {
       }
     };
     loadAll();
-  }, [contentAnim, headerAnim, receiverItemId]);
+  }, [contentAnim, headerAnim, receiverItemId, fromDraft]);
 
   // ── Toggle item selection ────────────────────────────────────────────────────
 
@@ -309,6 +324,7 @@ export default function ProposeTradeScreen() {
     if (type === "cash") {
       setSelectedItemIds([]);
       setTopUpAmount("");
+      setValueNote(null);
     } else {
       setCashAmount("");
     }
@@ -398,6 +414,20 @@ export default function ProposeTradeScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
+        {draftedBy && (
+          <View style={[styles.scoutBanner, { backgroundColor: theme.aiSurface, borderColor: theme.aiLight }]}>
+            <Ionicons name="sparkles" size={16} color={theme.ai} />
+            <Text style={[styles.scoutBannerText, { color: theme.textPrimary }]}>
+              {draftedBy === "scout"
+                ? "Drafted by Scout - review before sending."
+                : "Draft prepared for you - review before sending."}
+            </Text>
+            <TouchableOpacity onPress={() => setDraftedBy(null)} hitSlop={8} accessibilityLabel="Dismiss">
+              <Ionicons name="close" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── YOU WANT section ── */}
         <View
           style={[
@@ -841,6 +871,14 @@ export default function ProposeTradeScreen() {
             )}
           </View>
         )}
+
+        {/* Scout's note on the value gap, under the fairness meter. */}
+        {valueNote && tradeType === "item" && (
+          <View style={[styles.valueNote, { backgroundColor: theme.aiSurface }]}>
+            <Ionicons name="information-circle-outline" size={16} color={theme.ai} />
+            <Text style={[styles.valueNoteText, { color: theme.textSecondary }]}>{valueNote}</Text>
+          </View>
+        )}
       </Animated.ScrollView>
 
       {/* CTA */}
@@ -1048,6 +1086,25 @@ const styles = StyleSheet.create({
   scoreValue: { ...Typography.bodyMedium },
   progressTrack: { height: 6, borderRadius: Radius.full, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: Radius.full },
+  scoutBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing[2],
+    padding: Spacing[3],
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing[3],
+  },
+  scoutBannerText: { ...Typography.captionMedium, flex: 1 },
+  valueNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing[2],
+    padding: Spacing[3],
+    borderRadius: Radius.md,
+    marginTop: Spacing[3],
+  },
+  valueNoteText: { ...Typography.caption, flex: 1, lineHeight: 19 },
   fairTradeBadge: {
     flexDirection: "row",
     alignItems: "center",

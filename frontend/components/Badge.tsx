@@ -130,7 +130,7 @@ export const AIValueTag: React.FC<AIValueTagProps> = ({ value, style }) => (
     {/* Trend up arrow icon — replace with actual icon */}
     <Text style={styles.aiArrow}>↗</Text>
     <Text style={styles.aiValue}>{value}</Text>
-    <Text style={styles.aiLabel}> • AI Value</Text>
+    <Text style={styles.aiLabel}> • Valuation</Text>
   </View>
 );
 

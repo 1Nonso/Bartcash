@@ -37,7 +37,7 @@ test('Stored codes pass through', () => {
 
 test('Messages never carry raw text', () => {
    const m = valuationFailureMessage(GROQ_429)!;
-   assert.equal(m, 'Our AI valuer was busy. Try again in a minute.');
+   assert.equal(m, 'The valuation service was busy. Try again in a minute.');
    assert.ok(!/org_|groq|http/i.test(m));
    assert.equal(valuationFailureMessage(null), null);
    assert.equal(valuationFailureMessage(''), null);

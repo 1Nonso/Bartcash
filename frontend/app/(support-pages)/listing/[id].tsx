@@ -308,7 +308,7 @@ function ValuationCard({
         />
         <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
           {confidenceLevel === "high"
-            ? "High Confidence — AI is very certain about this value"
+            ? "High Confidence — this valuation is very reliable"
             : confidenceLevel === "medium"
               ? "Medium Confidence — estimate may vary"
               : "Low Confidence — limited data available"}{" "}

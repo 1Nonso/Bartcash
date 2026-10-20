@@ -276,7 +276,7 @@ export default function ReBargainScreen() {
           >
             <Ionicons name="sparkles" size={14} color={theme.ai} />
             <Text style={[styles.aiReferenceText, { color: theme.ai }]}>
-              Their item&apos;s AI value: ${theirItemValue.toLocaleString()}
+              Their item&apos;s valuation: ${theirItemValue.toLocaleString()}
             </Text>
           </View>
         )}

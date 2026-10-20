@@ -12,11 +12,11 @@ export type ValuationFailureCode =
    | 'unknown';
 
 const MESSAGES: Record<ValuationFailureCode, string> = {
-   rate_limited: 'Our AI valuer was busy. Try again in a minute.',
-   ai_unavailable: "Our AI valuer couldn't be reached. Try again later.",
+   rate_limited: 'The valuation service was busy. Try again in a minute.',
+   ai_unavailable: "The valuation service couldn't be reached. Try again later.",
    image_unavailable: "We couldn't read the listing photo. Try again, or change the main photo.",
    no_image: 'Add a photo to get a valuation.',
-   invalid_response: "Our AI valuer's answer couldn't be used. Try again.",
+   invalid_response: "The valuation couldn't be completed. Try again.",
    unknown: 'Something went wrong. Try again.',
 };
 

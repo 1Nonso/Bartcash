@@ -81,7 +81,7 @@ export default function ReviewListingScreen() {
     () => [
       {
         target: valuationRef,
-        text: "This is our AI's estimate of what your item is worth. Use it to set a fair value.",
+        text: "This is your item's Automated Valuation Result. Use it to set a fair value.",
       },
       ...(qloo
         ? [
@@ -294,7 +294,7 @@ export default function ReviewListingScreen() {
           <View style={styles.pendingRow}>
             <ActivityIndicator size="small" color={theme.ai} />
             <Text style={[styles.pendingText, { color: theme.textMuted }]}>
-              AI is calculating your item{"'"}s value...
+              Calculating your item{"'"}s value...
             </Text>
           </View>
         )}

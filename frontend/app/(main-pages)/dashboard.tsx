@@ -115,7 +115,7 @@ function ListingCard({ item, onPress }: ListingCardProps) {
           <View style={styles.valuationRow}>
             <Ionicons name="trending-up" size={12} color={Colors.ai} />
             <Text style={styles.valuationText}>{valuation}</Text>
-            <Text style={styles.aiLabel}>· AI Value</Text>
+            <Text style={styles.aiLabel}>· Valuation</Text>
           </View>
         )}
         {item.valuation?.status === "pending" && (

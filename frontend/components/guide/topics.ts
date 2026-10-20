@@ -18,7 +18,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     icon: "create-outline",
     points: [
       {
-        text: "Be exact. Put the brand and model in the title, like 'Samsung Galaxy A52, 128 GB'. The AI valuation and Scout both read it.",
+        text: "Be exact. Put the brand and model in the title, like 'Samsung Galaxy A52, 128 GB'. The valuation and Scout both read it.",
       },
       { text: "Be honest about condition. A fair description now avoids disputes at the swap." },
       { text: "Add clear photos in good light. The first photo is used for the valuation." },
@@ -26,11 +26,11 @@ export const TOPICS: Record<TopicId, Topic> = {
     ],
   },
   valuation: {
-    title: "How the AI valuation works",
+    title: "How the Automated Valuation works",
     icon: "sparkles",
     points: [
       {
-        text: "Our AI looks at your photo, title, description and condition, and estimates a USD price range.",
+        text: "We look at your photo, title, description and condition, and work out a USD price range.",
       },
       {
         text: "It's a guide, not a price tag. You set your own declared value, and both are shown to buyers.",

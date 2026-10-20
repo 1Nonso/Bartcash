@@ -132,19 +132,21 @@ export default function TabLayout() {
         tabBarLabelStyle: styles.label,
       }}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: "Home",
-          href: qloo ? undefined : null,
-          tabBarIcon: icon("home", "home-outline"),
-        }}
-      />
+      {/* Tabs go Back to the first declared route, so the flag-off Home
+          (Browse) comes first; with the flag on it redirects to Home. */}
       <Tabs.Screen
         name="dashboard"
         options={{
           title: "Home",
           href: qloo ? null : undefined,
+          tabBarIcon: icon("home", "home-outline"),
+        }}
+      />
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: "Home",
+          href: qloo ? undefined : null,
           tabBarIcon: icon("home", "home-outline"),
         }}
       />

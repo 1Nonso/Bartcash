@@ -22,7 +22,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
+import { useFeatures } from "@/hooks/useFeatures";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
@@ -64,7 +65,16 @@ function primaryImage(item: MyItem): string | null {
   return typeof img === "string" ? img : (img?.url ?? null);
 }
 
-export default function HomeScreen() {
+/** Flag off: Browse (dashboard) is Home; never show this screen then. */
+export default function HomeRoute() {
+  const theme = useAuthTheme();
+  const { qloo, loading } = useFeatures();
+  if (loading) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
+  if (!qloo) return <Redirect href="/(main-pages)/dashboard" />;
+  return <HomeScreen />;
+}
+
+function HomeScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
   const tabSpace = useTabBarSpace();

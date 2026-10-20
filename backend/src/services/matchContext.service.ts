@@ -67,7 +67,10 @@ export async function getMatchSummaries(
    for (const id of ids) {
       const mine = rows.filter((r) => r.sourceItemId === id);
       if (mine.length === 0) {
-         out.set(id, { count: 0, top_label: null, status: 'refreshing' });
+         // No rows is also what a run with no qualifying matches leaves, so
+         // report 0 (not refreshing, which would spin forever) and let the
+         // capped first-read refresh fill it in if there are matches.
+         out.set(id, { count: 0, top_label: null, status: 'ready' });
          await queueMatchRefresh(id, 'first_read');
          continue;
       }

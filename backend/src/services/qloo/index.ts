@@ -24,4 +24,4 @@ export type {
    QlooTag,
    QlooTagResult,
 } from './qlooTypes';
-export { QlooUsageError } from './qlooTypes';
+export { BARTCASH_ENTITY_TYPES, fromQlooTypes, QlooUsageError } from './qlooTypes';

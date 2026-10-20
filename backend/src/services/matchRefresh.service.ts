@@ -7,7 +7,8 @@ export type MatchRefreshTrigger =
    | 'wants_change'
    | 'taste_done'
    | 'stale_read'
-   | 'first_read';
+   | 'first_read'
+   | 'taste_profile';
 
 /** Reads queue at most one refresh per item per hour (per process). */
 export const READ_REFRESH_INTERVAL_MS = 60 * 60 * 1000;

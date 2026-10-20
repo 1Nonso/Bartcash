@@ -14,6 +14,7 @@ import disputeRoutes from '../src/routes/dispute.routes';
 import commentRoutes from '../src/routes/comment.routes';
 import notificationRoutes from '../src/routes/notification.routes';
 import messageRoutes from '../src/routes/message.routes';
+import tasteRoutes from './routes/taste.routes';
 import { errorHandler } from './middlewares/errorHandler.middleware';
 import { resetPasswordRedirect } from './controllers/auth.controllers';
 
@@ -53,6 +54,7 @@ app.use('/api/user', userRoutes);
 app.use('/api', commentRoutes); // /items/:id/comments, /comments/:id (before items)
 app.use('/api', ratingRoutes); // /ratings, /users/:id/ratings
 app.use('/api/items', itemRoutes);
+app.use('/api/taste', tasteRoutes);
 app.use(
    '/api/categories',
    categoryRoutes,

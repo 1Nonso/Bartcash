@@ -23,6 +23,17 @@ export const ENTITY_TYPE_MAP = {
 
 export type BartcashEntityType = keyof typeof ENTITY_TYPE_MAP;
 
+export const BARTCASH_ENTITY_TYPES = Object.keys(ENTITY_TYPE_MAP) as BartcashEntityType[];
+
+/** The Bartcash type for a Qloo entity's urn types (first known one), or null. */
+export function fromQlooTypes(urns: readonly string[]): BartcashEntityType | null {
+   for (const urn of urns) {
+      const hit = BARTCASH_ENTITY_TYPES.find((t) => ENTITY_TYPE_MAP[t] === urn);
+      if (hit) return hit;
+   }
+   return null;
+}
+
 export function toQlooType(type: string): string {
    if (!Object.prototype.hasOwnProperty.call(ENTITY_TYPE_MAP, type)) {
       throw new QlooUsageError(`Unknown entity type "${type}"`);

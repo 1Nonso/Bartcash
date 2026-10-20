@@ -311,12 +311,27 @@ export function createQlooClient(deps: QlooClientDeps) {
    return {
       /** GET /search — resolve text to entities of one type. */
       search(
-         args: { query: string; type: BartcashEntityType } & CallOptions,
+         args: {
+            query: string;
+            /** One type, or several in one call (verified Oct 20: Qloo mixes them). */
+            type: BartcashEntityType | readonly BartcashEntityType[];
+            /** Results to return; Qloo's default when omitted. */
+            take?: number;
+         } & CallOptions,
       ): Promise<QlooResult<QlooSearchEntity[]>> {
+         const types = (Array.isArray(args.type) ? args.type : [args.type]) as BartcashEntityType[];
+         if (types.length === 0) throw new QlooUsageError('search needs at least one type');
+         if (args.take !== undefined && (!Number.isInteger(args.take) || args.take < 1 || args.take > MAX_CANDIDATES)) {
+            throw new QlooUsageError(`take must be an integer from 1 to ${MAX_CANDIDATES}`);
+         }
          return execute({
             endpoint: 'search',
             path: '/search',
-            params: { query: cleanQuery(args.query), types: toQlooType(args.type) },
+            params: {
+               query: cleanQuery(args.query),
+               types: types.map(toQlooType).join(','),
+               ...(args.take !== undefined ? { take: String(args.take) } : {}),
+            },
             ttlMs: WEEK_MS,
             purpose: args.purpose ?? 'background',
             parse: parseSearch,

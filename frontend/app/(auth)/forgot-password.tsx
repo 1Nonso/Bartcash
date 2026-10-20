@@ -8,10 +8,12 @@ import {
   Animated,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
   useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -21,6 +23,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPasswordScreen() {
   const theme = useAuthTheme();
+  const insets = useSafeAreaInsets();
 
   // Receives error message if redirected back from reset-password with invalid/expired token
   const { error: tokenError } = useLocalSearchParams<{ error?: string }>();
@@ -123,7 +126,10 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.bg }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: theme.bg, paddingTop: insets.top + Spacing[3] }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <StatusBar style={theme.statusBarStyle} />
 
       <TouchableOpacity
@@ -278,12 +284,12 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
         </Animated.View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingTop: Platform.OS === "ios" ? 56 : 40 },
+  root: { flex: 1 },
   backBtn: {
     paddingHorizontal: Spacing[6],
     paddingVertical: Spacing[2],

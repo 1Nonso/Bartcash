@@ -12,7 +12,8 @@ import { Colors } from "@/constants/colors";
  *  - sign-in           → Sign In
  *  - sign-up           → Sign Up
  *  - forgot-password   → Forgot Password
- *  - otp-verification  → OTP (email & phone)
+ *  - verify-email      → Ask for a new verification code (unverified account)
+ *  - otp-verification  → OTP (email)
  *  - reset-password    → Reset Password
  */
 
@@ -56,6 +57,10 @@ export default function AuthLayout() {
         />
         <Stack.Screen
           name="forgot-password"
+          options={{ animation: "slide_from_bottom", gestureEnabled: true }}
+        />
+        <Stack.Screen
+          name="verify-email"
           options={{ animation: "slide_from_bottom", gestureEnabled: true }}
         />
         <Stack.Screen

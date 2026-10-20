@@ -15,6 +15,7 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -275,6 +276,7 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
 export default function InboxScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
 
   const [activeTab, setActiveTab] = useState<InboxTab>("chats");
   const [trades, setTrades] = useState<TradeListItem[]>([]);
@@ -625,7 +627,7 @@ export default function InboxScreen() {
             contentContainerStyle={[
               styles.listContent,
               {
-                paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[4],
+                paddingBottom: tabSpace,
               },
             ]}
             showsVerticalScrollIndicator={false}

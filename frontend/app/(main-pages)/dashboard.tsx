@@ -23,6 +23,7 @@ import { Redirect, router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -223,6 +224,7 @@ export default function DashboardScreen() {
 function BrowseScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
 
   // State
   const [categories, setCategories] = useState<Category[]>([]);
@@ -630,7 +632,7 @@ function BrowseScreen() {
               colors={[Colors.primary]}
             />
           }
-          contentContainerStyle={styles.flatListContent}
+          contentContainerStyle={[styles.flatListContent, { paddingBottom: tabSpace }]}
           showsVerticalScrollIndicator={false}
           columnWrapperStyle={styles.columnWrapper}
         />
@@ -696,7 +698,6 @@ const styles = StyleSheet.create({
   },
   flatListContent: {
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Layout.tabBarHeight + Spacing[4],
   },
   columnWrapper: {
     marginBottom: Spacing[3],

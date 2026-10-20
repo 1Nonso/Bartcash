@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -135,7 +135,7 @@ function StarRating({ score }: { score: number }) {
 
 export default function ProfileScreen() {
   const theme = useAuthTheme();
-  const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [listings, setListings] = useState<MyListing[]>([]);
@@ -282,7 +282,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[6] },
+          { paddingBottom: tabSpace + Spacing[2] },
           { paddingTop: 60 },
         ]}
       >

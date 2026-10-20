@@ -32,6 +32,7 @@ import { router, useFocusEffect } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -242,6 +243,7 @@ export default function SearchScreen({
   const discover = mode === "discover";
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -729,7 +731,7 @@ export default function SearchScreen({
             ListFooterComponent={renderFooter()}
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.4}
-            contentContainerStyle={styles.flatListContent}
+            contentContainerStyle={[styles.flatListContent, { paddingBottom: tabSpace }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -826,7 +828,6 @@ const styles = StyleSheet.create({
   flatListContent: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing[3],
-    paddingBottom: Layout.tabBarHeight + Spacing[4],
     gap: Spacing[3],
   },
 

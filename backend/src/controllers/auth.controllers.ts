@@ -499,6 +499,8 @@ export async function login(
    if (!user.emailVerifiedAt) {
       return res.status(403).json({
          success: false,
+         // The app opens Verify Email on this code.
+         code: 'EMAIL_NOT_VERIFIED',
          message:
             'Please verify your email before logging in.',
          errors: {

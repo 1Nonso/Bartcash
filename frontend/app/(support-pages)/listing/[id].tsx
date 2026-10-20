@@ -173,6 +173,12 @@ function ValuationCard({
             ? "Valuation failed."
             : "Value estimate unavailable."}
         </Text>
+        {/* Owner only: what went wrong, as a short message from the API. */}
+        {isOwner && valuation?.status === "failed" && !!valuation.failed_reason && (
+          <Text style={[styles.valuationFailedReason, { color: theme.textSecondary }]}>
+            {valuation.failed_reason}
+          </Text>
+        )}
         {canRetry && (
           <TouchableOpacity
             style={[styles.retryBtn, { borderColor: theme.borderDefault }]}
@@ -719,7 +725,7 @@ export default function ListingDetailScreen() {
 
           <View style={styles.metaRow}>
             <View
-              style={[styles.metaBadge, { backgroundColor: Colors.gray[100] }]}
+              style={[styles.metaBadge, { backgroundColor: theme.surfaceVariant }]}
             >
               <Text
                 style={[styles.metaBadgeText, { color: theme.textPrimary }]}
@@ -1050,6 +1056,7 @@ const styles = StyleSheet.create({
   },
   valuationSubtitle: { ...Typography.caption, marginBottom: Spacing[3] },
   valuationUnavailable: { ...Typography.body },
+  valuationFailedReason: { ...Typography.caption, marginTop: Spacing[1] },
   retryBtn: {
     flexDirection: "row",
     alignItems: "center",

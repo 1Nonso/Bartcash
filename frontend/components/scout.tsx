@@ -5,7 +5,7 @@
  * "taste" wording (callers pass the text).
  */
 
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -21,6 +21,23 @@ import type { CheckResult, ScoreLabelValue } from "@/config/items";
 import type { MatchEntry } from "@/config/matches";
 
 type Theme = ReturnType<typeof useAuthTheme>;
+
+// ─── Thumb: image with a placeholder when missing or failing to load ──────────
+
+function Thumb({ uri, style, iconSize }: { uri: string | null; style: object; iconSize: number }) {
+  const theme = useAuthTheme();
+  const [failed, setFailed] = useState(false);
+  if (!uri || failed) {
+    return (
+      <View style={[style, styles.center, { backgroundColor: theme.surfaceVariant }]}>
+        <Ionicons name="image-outline" size={iconSize} color={theme.textMuted} />
+      </View>
+    );
+  }
+  return (
+    <Image source={{ uri }} style={style} resizeMode="cover" onError={() => setFailed(true)} />
+  );
+}
 
 // ─── ScoutBadge ───────────────────────────────────────────────────────────────
 
@@ -83,9 +100,11 @@ interface LensCardProps {
   /** Match count; null hides the pill. */
   count?: number | null;
   refreshing?: boolean;
+  /** The listing has no wants: show "Add wants" instead of a count. */
+  needsWants?: boolean;
 }
 
-export function LensCard({ title, image, selected, onPress, count, refreshing }: LensCardProps) {
+export function LensCard({ title, image, selected, onPress, count, refreshing, needsWants }: LensCardProps) {
   const theme = useAuthTheme();
   return (
     <TouchableOpacity
@@ -103,17 +122,15 @@ export function LensCard({ title, image, selected, onPress, count, refreshing }:
         },
       ]}
     >
-      {image ? (
-        <Image source={{ uri: image }} style={styles.lensImage} resizeMode="cover" />
-      ) : (
-        <View style={[styles.lensImage, styles.center, { backgroundColor: theme.surfaceVariant }]}>
-          <Ionicons name="image-outline" size={22} color={theme.textMuted} />
-        </View>
-      )}
+      <Thumb key={image ?? "none"} uri={image} style={styles.lensImage} iconSize={22} />
       <Text numberOfLines={1} style={[styles.lensTitle, { color: theme.textPrimary }]}>
         {title}
       </Text>
-      {refreshing ? (
+      {needsWants ? (
+        <View style={[styles.countPill, { backgroundColor: theme.surfaceVariant }]}>
+          <Text style={[styles.countPillText, { color: theme.textSecondary }]}>Add wants</Text>
+        </View>
+      ) : refreshing ? (
         <ActivityIndicator size={12} color={theme.ai} style={styles.lensSpinner} />
       ) : count != null ? (
         <View style={[styles.countPill, { backgroundColor: theme.aiLight }]}>
@@ -155,13 +172,7 @@ export function MatchCard({ match, onPress }: { match: MatchEntry; onPress: () =
       activeOpacity={0.9}
       style={[styles.match, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}
     >
-      {item.primary_image ? (
-        <Image source={{ uri: item.primary_image }} style={styles.matchImage} resizeMode="cover" />
-      ) : (
-        <View style={[styles.matchImage, styles.center, { backgroundColor: theme.surfaceVariant }]}>
-          <Ionicons name="image-outline" size={24} color={theme.textMuted} />
-        </View>
-      )}
+      <Thumb key={item.primary_image ?? "none"} uri={item.primary_image} style={styles.matchImage} iconSize={24} />
       <View style={styles.matchBody}>
         <Text numberOfLines={2} style={[styles.matchTitle, { color: theme.textPrimary }]}>
           {item.title}

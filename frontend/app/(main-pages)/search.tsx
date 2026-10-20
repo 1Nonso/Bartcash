@@ -580,16 +580,18 @@ export default function SearchScreen({
             )}
           </View>
 
-          {/* Cancel */}
-          <TouchableOpacity
-            onPress={() => goBack()}
-            style={styles.cancelBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.cancelText, { color: theme.textPrimary }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
+          {/* Cancel (not on Discover, which is a tab) */}
+          {!discover && (
+            <TouchableOpacity
+              onPress={() => goBack()}
+              style={styles.cancelBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelText, { color: theme.textPrimary }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
 

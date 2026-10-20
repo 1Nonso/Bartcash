@@ -1,11 +1,11 @@
 /**
  * Home (UI spec §13.4) — shown instead of Home / Browse when features.qloo is on.
- * Lens slider of the user's available listings, then Scout's ranked matches
- * for the selected one.
+ * Lens slider of the user's available listings, then Scout's top 5 matches
+ * for the selected one and "See all N matches" (the All matches screen).
  *
  * API:
  *   GET /items/mine?status=available&include=match_summary
- *   GET /items/{id}/matches?limit=10&cursor=   (poll 3 s up to 30 s while refreshing)
+ *   GET /items/{id}/matches?limit=5   (poll 3 s up to 30 s while refreshing)
  *   GET /notifications (unread count)
  *
  * The Taste lens ("People like you") comes with the taste profile step.
@@ -13,7 +13,6 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -46,12 +45,17 @@ import {
   ScoutBadge,
 } from "@/components/scout";
 
-const PAGE_SIZE = 10;
+/** Matches shown on Home; the rest are on the All matches screen. */
+const HOME_LIMIT = 5;
 const POLL_INTERVAL = 3000;
 const POLL_TIMEOUT_MS = 30000;
 
 // Last lens used this session (not stored, per §13.4).
 let lastLensId: string | null = null;
+
+function hasWants(item: MyItem | null): boolean {
+  return (item?.wants?.length ?? 0) > 0;
+}
 
 function primaryImage(item: MyItem): string | null {
   const img = item.primary_image;
@@ -73,7 +77,6 @@ export default function HomeScreen() {
   const [meta, setMeta] = useState<MatchesMeta | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMatches, setLoadingMatches] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [polling, setPolling] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ export default function HomeScreen() {
       const myId = requestId.current;
       pollRef.current = setInterval(async () => {
         try {
-          const data = await getMatches(itemId, { limit: PAGE_SIZE });
+          const data = await getMatches(itemId, { limit: HOME_LIMIT });
           if (myId !== requestId.current) return;
           setMatches(data.items);
           setMeta(data.meta);
@@ -131,7 +134,7 @@ export default function HomeScreen() {
       setLoadingMatches(true);
       setMatchError(null);
       try {
-        const data = await getMatches(itemId, { limit: PAGE_SIZE });
+        const data = await getMatches(itemId, { limit: HOME_LIMIT });
         if (myId !== requestId.current) return;
         setMatches(data.items);
         setMeta(data.meta);
@@ -152,21 +155,23 @@ export default function HomeScreen() {
     [startPolling, stopPolling],
   );
 
-  const loadMore = useCallback(async () => {
-    if (!selectedId || !nextCursor || loadingMore || loadingMatches) return;
-    const myId = requestId.current;
-    setLoadingMore(true);
-    try {
-      const data = await getMatches(selectedId, { limit: PAGE_SIZE, cursor: nextCursor });
-      if (myId !== requestId.current) return;
-      setMatches((prev) => [...prev, ...data.items]);
-      setNextCursor(data.next_cursor);
-    } catch {
-      // Silent: scrolling again retries.
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [selectedId, nextCursor, loadingMore, loadingMatches]);
+  /** Load a lens's matches; a listing without wants has none (§ Oct 20 rule). */
+  const showLens = useCallback(
+    (item: MyItem | null) => {
+      if (item && hasWants(item)) {
+        loadMatches(item.id);
+        return;
+      }
+      ++requestId.current;
+      stopPolling();
+      setMatches([]);
+      setMeta(null);
+      setNextCursor(null);
+      setMatchError(null);
+      setLoadingMatches(false);
+    },
+    [loadMatches, stopPolling],
+  );
 
   // ── Lenses (reloaded on every focus) ────────────────────────────────────────
 
@@ -183,16 +188,12 @@ export default function HomeScreen() {
       const nextId = keep?.id ?? null;
       lastLensId = nextId;
       setSelectedId(nextId);
-      if (nextId) await loadMatches(nextId);
-      else {
-        setMatches([]);
-        setMeta(null);
-      }
+      showLens(keep);
     } catch {
       setLensError(true);
       setLenses((prev) => prev ?? []);
     }
-  }, [selectedId, loadMatches]);
+  }, [selectedId, showLens]);
 
   // Latest loadLenses for the focus effect, without re-running it on every
   // selection change.
@@ -212,16 +213,16 @@ export default function HomeScreen() {
   );
 
   const selectLens = useCallback(
-    (id: string) => {
-      if (id === selectedId) return;
-      lastLensId = id;
-      setSelectedId(id);
+    (item: MyItem) => {
+      if (item.id === selectedId) return;
+      lastLensId = item.id;
+      setSelectedId(item.id);
       setMatches([]);
       setMeta(null);
       setNextCursor(null);
-      loadMatches(id);
+      showLens(item);
     },
-    [selectedId, loadMatches],
+    [selectedId, showLens],
   );
 
   const handlePullRefresh = useCallback(async () => {
@@ -243,6 +244,13 @@ export default function HomeScreen() {
   );
   const browseAll = () => router.push("/(main-pages)/discover");
   const createListing = () => router.push("/(support-pages)/listing/create");
+  const addWants = (id: string) =>
+    router.push({ pathname: "/(support-pages)/listing/[id]/edit", params: { id } });
+  const seeAll = (item: MyItem) =>
+    router.push({
+      pathname: "/(support-pages)/matches/[id]",
+      params: { id: item.id, title: item.title },
+    });
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -295,7 +303,8 @@ export default function HomeScreen() {
             title={l.title}
             image={primaryImage(l)}
             selected={l.id === selectedId}
-            onPress={() => selectLens(l.id)}
+            onPress={() => selectLens(l)}
+            needsWants={!hasWants(l)}
             count={l.match_summary?.status === "ready" ? l.match_summary.count : null}
             refreshing={l.match_summary?.status === "refreshing"}
           />
@@ -304,7 +313,7 @@ export default function HomeScreen() {
       </ScrollView>
     );
 
-  const resultsHeading = selected ? (
+  const resultsHeading = selected && hasWants(selected) ? (
     <View style={styles.resultsHead}>
       <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.textPrimary }]}>
         Matches for {selected.title}
@@ -373,6 +382,25 @@ export default function HomeScreen() {
         </View>
       );
     }
+    if (selected && !hasWants(selected)) {
+      return (
+        <View style={[styles.emptyCard, { backgroundColor: theme.aiSurface }]}>
+          <ScoutBadge />
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
+            Add what you want to see matches
+          </Text>
+          <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
+            Tell Scout which categories you&apos;d take for {selected.title}.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: theme.btnPrimary }]}
+            onPress={() => addWants(selected.id)}
+          >
+            <Text style={[styles.primaryBtnText, { color: theme.btnPrimaryText }]}>Add wants</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     if (matchError && selectedId) {
       return (
         <View style={styles.emptyMatches}>
@@ -389,7 +417,9 @@ export default function HomeScreen() {
     if (refreshing) return null;
     return (
       <View style={styles.emptyMatches}>
-        <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>No matches yet.</Text>
+        <Text style={[styles.emptyBody, { color: theme.textSecondary, textAlign: "center" }]}>
+          No close matches yet. Scout will keep looking.
+        </Text>
         <TouchableOpacity
           style={[styles.secondaryBtn, { borderColor: theme.borderDefault }]}
           onPress={browseAll}
@@ -400,15 +430,23 @@ export default function HomeScreen() {
     );
   })();
 
+  const total = selected?.match_summary?.count ?? null;
   const footer =
     matches.length === 0 ? null : (
       <View style={styles.footer}>
-        {loadingMore && <ActivityIndicator color={theme.ai} />}
-        {!nextCursor && (
-          <TouchableOpacity onPress={browseAll} style={styles.linkBtn}>
-            <Text style={[styles.linkText, { color: theme.link }]}>Browse all listings</Text>
+        {!!nextCursor && selected && (
+          <TouchableOpacity
+            style={[styles.secondaryBtn, { borderColor: theme.borderDefault }]}
+            onPress={() => seeAll(selected)}
+          >
+            <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>
+              {total && total > matches.length ? `See all ${total} matches` : "See all matches"}
+            </Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity onPress={browseAll} style={styles.linkBtn}>
+          <Text style={[styles.linkText, { color: theme.link }]}>Browse all listings</Text>
+        </TouchableOpacity>
       </View>
     );
 
@@ -430,8 +468,6 @@ export default function HomeScreen() {
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyState}
         ListFooterComponent={footer}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.4}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={pullRefreshing} onRefresh={handlePullRefresh} tintColor={theme.ai} />

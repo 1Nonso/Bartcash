@@ -69,6 +69,8 @@ export interface MyItem {
   location: string | null;
   primary_image: any | null;
   valuation: ItemValuation | null;
+  /** Ranked category picks (flag on). */
+  wants?: { category_id: string; name: string; rank: number }[];
   match_summary?: MatchSummary | null;
   created_at: string;
 }

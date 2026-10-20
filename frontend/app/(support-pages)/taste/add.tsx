@@ -1,9 +1,11 @@
 /**
  * Add Interests (UI spec §13.7) — search brands, artists, films, shows,
- * games, books and podcasts. Never saves: Done (or Back) merges the picks
- * into the shared draft and returns to Taste Profile.
+ * games, books and podcasts. Before a search it shows suggestions for the
+ * selected type. Never saves: Done (or Back) merges the picks into the
+ * shared draft and returns to Taste Profile.
  *
- * API: GET /taste/search?q=&type= (30 per minute; 503 when Qloo is down)
+ * API: GET /taste/suggestions?type=, GET /taste/search?q=&type=
+ * (30 per minute each; search answers 503 when Qloo is down)
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +14,7 @@ import {
   FlatList,
   Image,
   ScrollView,
+  SectionList,
   StatusBar,
   StyleSheet,
   Text,
@@ -26,6 +29,7 @@ import { showToast } from "@/hooks/toast";
 import { Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import {
+  getTasteSuggestions,
   searchTaste,
   tasteDraft,
   TASTE_TYPE_LABELS,
@@ -34,6 +38,7 @@ import {
   type TasteEntity,
   type TasteEntityType,
   type TasteSearchResult,
+  type TasteSuggestionSection,
 } from "@/config/taste";
 
 const MAX_ENTITIES = 25;
@@ -54,6 +59,8 @@ export default function AddInterestsScreen() {
   const [results, setResults] = useState<TasteSearchResult[]>([]);
   const [state, setState] = useState<SearchState>("idle");
   const requestId = useRef(0);
+  // Suggestions per type chip ("all" for none), fetched once per visit.
+  const [suggestions, setSuggestions] = useState<Record<string, TasteSuggestionSection[] | "error">>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onList = new Set(list.map((e) => e.qloo_entity_id));
@@ -98,6 +105,21 @@ export default function AddInterestsScreen() {
     const t = setTimeout(() => inputRef.current?.focus(), 250);
     return () => clearTimeout(t);
   }, []);
+
+  const typeKey = type ?? "all";
+  useEffect(() => {
+    if (suggestions[typeKey] !== undefined) return;
+    let live = true;
+    getTasteSuggestions(type ?? undefined)
+      .then((sections) => live && setSuggestions((prev) => ({ ...prev, [typeKey]: sections })))
+      .catch(() => live && setSuggestions((prev) => ({ ...prev, [typeKey]: "error" })));
+    return () => {
+      live = false;
+    };
+  }, [type, typeKey, suggestions]);
+
+  const searching = query.trim().length >= 2;
+  const current = suggestions[typeKey];
 
   const toggle = (r: TasteSearchResult) => {
     if (onList.has(r.qloo_entity_id)) {
@@ -259,6 +281,32 @@ export default function AddInterestsScreen() {
         </ScrollView>
       </View>
 
+      {!searching ? (
+        current === undefined ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={theme.ai} />
+          </View>
+        ) : current === "error" || current.length === 0 ? (
+          <View style={styles.center}>
+            <Text style={[styles.hint, { color: theme.textSecondary }]}>Search for something you love.</Text>
+          </View>
+        ) : (
+          <SectionList
+            sections={current.map((sec) => ({ title: sec.title, key: `${sec.key}-${sec.title}`, data: sec.entities }))}
+            keyExtractor={(r, i) => `${r.qloo_entity_id}-${i}`}
+            renderItem={renderRow}
+            renderSectionHeader={({ section }) => (
+              <Text style={[styles.sectionTitle, { color: theme.textSecondary, backgroundColor: theme.bg }]}>
+                {section.title}
+              </Text>
+            )}
+            stickySectionHeadersEnabled={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+          />
+        )
+      ) : (
       <FlatList
         data={state === "done" ? results : []}
         keyExtractor={(r) => r.qloo_entity_id}
@@ -268,6 +316,7 @@ export default function AddInterestsScreen() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
       />
+      )}
 
       <View
         style={[
@@ -310,6 +359,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[1.5],
   },
   chipText: { ...Typography.captionMedium },
+  sectionTitle: {
+    ...Typography.captionMedium,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing[4],
+    paddingBottom: Spacing[1],
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",

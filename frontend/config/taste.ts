@@ -77,6 +77,22 @@ export async function searchTaste(
   return response.data.data.entities;
 }
 
+export interface TasteSuggestionSection {
+  key: "listed" | "for_you" | "popular";
+  title: string;
+  entities: TasteSearchResult[];
+}
+
+/** GET /taste/suggestions — shown on Add Interests before a search. */
+export async function getTasteSuggestions(
+  type?: TasteEntityType,
+): Promise<TasteSuggestionSection[]> {
+  const response = await api.get("/taste/suggestions", {
+    params: type ? { type } : undefined,
+  });
+  return response.data.data.sections;
+}
+
 /** GET /taste/profile */
 export async function getTasteProfile(): Promise<TasteProfile> {
   const response = await api.get("/taste/profile");

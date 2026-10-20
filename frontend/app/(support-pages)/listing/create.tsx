@@ -108,7 +108,8 @@ export default function CreateListingScreen() {
     ],
     [],
   );
-  const tour = useTour("create", tourSteps, true);
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("create", tourSteps, true, { scrollRef });
   const insets = useSafeAreaInsets();
 
   // Form state
@@ -391,6 +392,9 @@ export default function CreateListingScreen() {
         ]}
       >
         <ScrollView
+          ref={scrollRef}
+          onScroll={tour.onScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
@@ -870,7 +874,7 @@ export default function CreateListingScreen() {
           )}
         </TouchableOpacity>
       </View>
-      {tour}
+      {tour.node}
     </KeyboardAvoidingView>
   );
 }

@@ -298,10 +298,12 @@ function HomeScreen() {
   const noListings = lenses !== null && lenses.length === 0;
   // Waits for the welcome card and for listings; with none it waits for
   // the user's first listing.
+  const scrollRef = useRef<any>(null);
   const tour = useTour(
     "home",
     tourSteps,
     welcome.seen && !!lenses && lenses.length > 0 && !loadingMatches,
+    { scrollRef },
   );
 
   // ── Render pieces ──────────────────────────────────────────────────────────
@@ -537,6 +539,9 @@ function HomeScreen() {
         translucent={false}
       />
       <FlatList
+        ref={scrollRef}
+        onScroll={tour.onScroll}
+        scrollEventThrottle={16}
         data={matches}
         keyExtractor={(m) => m.item.id}
         renderItem={({ item, index }) => (
@@ -558,7 +563,7 @@ function HomeScreen() {
         showsVerticalScrollIndicator={false}
       />
       {welcome.node}
-      {tour}
+      {tour.node}
     </View>
   );
 }

@@ -1,9 +1,11 @@
 /**
  * The one-time welcome card (first open of Home / Browse). Returns the node
  * to render and whether it has been seen (tours on that screen wait for it).
+ * Must be used in a screen (it re-checks on focus).
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Layout, Radius, Spacing, Typography } from "@/constants";
@@ -18,13 +20,17 @@ export function useWelcome(): { node: React.ReactNode; seen: boolean } {
   // null until storage has been read.
   const [seen, setSeen] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    hasSeen(KEY).then((v) => live && setSeen(v));
-    return () => {
-      live = false;
-    };
-  }, []);
+  // Re-read on every focus: Home / Browse stay mounted as tabs, and
+  // "Replay tips" must show the card again without a restart.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      hasSeen(KEY).then((v) => live && setSeen(v));
+      return () => {
+        live = false;
+      };
+    }, []),
+  );
 
   const close = () => {
     setSeen(true);

@@ -421,7 +421,8 @@ export default function ListingDetailScreen() {
     ],
     [],
   );
-  const tour = useTour("match", tourSteps, !!context && !!item?.match_context);
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("match", tourSteps, !!context && !!item?.match_context, { scrollRef });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -685,6 +686,9 @@ export default function ListingDetailScreen() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={tour.onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         style={{ opacity: contentAnim }}
@@ -982,7 +986,7 @@ export default function ListingDetailScreen() {
           </View>
         )}
       </View>
-      {tour}
+      {tour.node}
     </View>
   );
 }

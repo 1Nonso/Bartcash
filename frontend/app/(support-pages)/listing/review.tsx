@@ -95,7 +95,8 @@ export default function ReviewListingScreen() {
     ],
     [qloo],
   );
-  const tour = useTour("review", tourSteps, !loading);
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("review", tourSteps, !loading, { scrollRef });
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [showPickError, setShowPickError] = useState(false);
@@ -489,6 +490,9 @@ export default function ReviewListingScreen() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={tour.onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         style={{ opacity: contentAnim }}
         contentContainerStyle={[
@@ -673,7 +677,7 @@ export default function ReviewListingScreen() {
           )}
         </TouchableOpacity>
       </View>
-      {tour}
+      {tour.node}
     </View>
   );
 }

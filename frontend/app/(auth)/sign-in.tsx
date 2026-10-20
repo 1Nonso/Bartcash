@@ -13,7 +13,8 @@ import {
   useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
 import { login } from "@/config/auth";
@@ -22,6 +23,12 @@ import { registerForPushNotifications } from "@/config/notifications";
 export default function SignInScreen() {
   const theme = useAuthTheme();
 
+  const insets = useSafeAreaInsets();
+  // verified=true when arriving from the OTP screen after verifying.
+  const { verified } = useLocalSearchParams<{ verified?: string }>();
+  const [showVerified, setShowVerified] = useState(verified === "true");
+  // Login refused because the email is not verified (code EMAIL_NOT_VERIFIED).
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -82,6 +89,8 @@ export default function SignInScreen() {
   const handleSignIn = async () => {
     if (!isValid || loading) return;
     setError("");
+    setNeedsVerification(false);
+    setShowVerified(false);
 
     Animated.sequence([
       Animated.timing(buttonScale, {
@@ -109,6 +118,9 @@ export default function SignInScreen() {
 
       if (status === 429) {
         setError("Too many failed attempts. Please try again in 15 minutes.");
+      } else if (status === 403 && err.response?.data?.code === "EMAIL_NOT_VERIFIED") {
+        setNeedsVerification(true);
+        setError("Your email isn't verified yet. Verify it to sign in.");
       } else if (status === 403) {
         setError(message || "Account issue. Please check your email.");
       } else if (status === 401) {
@@ -128,7 +140,7 @@ export default function SignInScreen() {
     >
       <StatusBar style={theme.statusBarStyle} />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + Spacing[7] }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -160,6 +172,20 @@ export default function SignInScreen() {
             },
           ]}
         >
+          {showVerified && !error ? (
+            <View
+              style={[
+                styles.errorBanner,
+                styles.successBanner,
+                { backgroundColor: theme.successLight, borderColor: theme.success },
+              ]}
+            >
+              <Text style={[styles.errorBannerText, { color: theme.textPrimary }]}>
+                Email verified. You can sign in now.
+              </Text>
+            </View>
+          ) : null}
+
           {error ? (
             <View
               style={[styles.errorBanner, { backgroundColor: theme.errorBg }]}
@@ -167,6 +193,21 @@ export default function SignInScreen() {
               <Text style={[styles.errorBannerText, { color: theme.error }]}>
                 {error}
               </Text>
+              {needsVerification && (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(auth)/verify-email",
+                      params: { email: email.trim() },
+                    })
+                  }
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.bannerAction, { color: theme.error }]}>
+                    Verify email
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
 
@@ -193,6 +234,7 @@ export default function SignInScreen() {
               onChangeText={(v) => {
                 setEmail(v);
                 setError("");
+                setNeedsVerification(false);
               }}
               onFocus={() => setEmailFocused(true)}
               onBlur={() => setEmailFocused(false)}
@@ -245,15 +287,29 @@ export default function SignInScreen() {
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.forgotBtn}
-            onPress={() => router.push("/(auth)/forgot-password")}
-            activeOpacity={0.6}
-          >
-            <Text style={[styles.forgotText, { color: theme.textPrimary }]}>
-              Forgot Password?
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.linkRow}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/(auth)/verify-email",
+                  params: email.trim() ? { email: email.trim() } : {},
+                })
+              }
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.secondaryLink, { color: theme.textMuted }]}>
+                Didn{"'"}t verify your email?
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/forgot-password")}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.forgotText, { color: theme.textPrimary }]}>
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         <Animated.View style={[styles.bottom, { opacity: bottomAnim }]}>
@@ -307,7 +363,6 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing[6],
-    paddingTop: Platform.OS === "ios" ? 72 : 52,
     paddingBottom: Spacing[10],
   },
   header: { marginBottom: Spacing[7] },
@@ -325,6 +380,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[4],
   },
   errorBannerText: { ...Typography.caption },
+  successBanner: { borderWidth: 1 },
+  bannerAction: {
+    ...Typography.captionMedium,
+    textDecorationLine: "underline",
+    marginTop: Spacing[1],
+  },
   fieldGroup: { marginBottom: Spacing[4] },
   label: { ...Typography.inputLabel, marginBottom: Spacing[2] },
   input: {
@@ -345,7 +406,15 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "ios" ? 13 : 11,
   },
   toggleText: { ...Typography.captionMedium, paddingHorizontal: Spacing[1] },
-  forgotBtn: { alignSelf: "flex-end", marginTop: Spacing[1] },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: Spacing[2],
+    marginTop: Spacing[1],
+  },
+  secondaryLink: { ...Typography.caption },
   forgotText: { ...Typography.bodyMedium },
   bottom: { gap: Spacing[3] },
   primaryBtn: {

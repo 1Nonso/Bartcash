@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -23,6 +24,7 @@ const PASSWORD_REGEX = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
 
 export default function ResetPasswordScreen() {
   const theme = useAuthTheme();
+  const insets = useSafeAreaInsets();
 
   // Token is extracted from the deep link
   // bartcash://reset-password?token=xxxxxx
@@ -195,6 +197,7 @@ export default function ResetPasswordScreen() {
         <Animated.View
           style={[
             styles.content,
+            { paddingTop: insets.top + Spacing[3] },
             {
               opacity: contentAnim,
               transform: [{ translateY: contentTranslate }],
@@ -373,7 +376,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: Spacing[6],
-    paddingTop: Platform.OS === "ios" ? 56 : 40,
   },
   backBtn: {
     paddingVertical: Spacing[2],

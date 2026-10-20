@@ -9,10 +9,12 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
+  KeyboardAvoidingView,
   useAnimatedValue,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -23,8 +25,9 @@ const RESEND_COOLDOWN = 60; // seconds
 
 export default function OTPVerificationScreen() {
   const theme = useAuthTheme();
+  const insets = useSafeAreaInsets();
 
-  // Email is passed as a param from sign-up
+  // Email is passed as a param from Sign Up or Verify Email
   const { email } = useLocalSearchParams<{ email: string }>();
 
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
@@ -161,8 +164,14 @@ export default function OTPVerificationScreen() {
       )
     : "your email";
 
+  // Opened without an email (e.g. a stale link): ask for it first.
+  if (!email) return <Redirect href="/(auth)/verify-email" />;
+
   return (
-    <View style={[styles.root, { backgroundColor: theme.bg }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: theme.bg, paddingTop: insets.top + Spacing[3] }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <StatusBar style={theme.statusBarStyle} />
 
       <TouchableOpacity
@@ -291,12 +300,12 @@ export default function OTPVerificationScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingTop: Platform.OS === "ios" ? 56 : 40 },
+  root: { flex: 1 },
   backBtn: {
     paddingHorizontal: Spacing[6],
     paddingVertical: Spacing[2],

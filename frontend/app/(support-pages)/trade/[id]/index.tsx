@@ -134,7 +134,7 @@ function TradeItemCard({ item, label }: TradeItemCardProps) {
               <Ionicons name="trending-up" size={11} color={Colors.ai} />
               <Text style={styles.valuationText}>{valuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-                · AI Value
+                · Valuation
               </Text>
             </View>
           )}

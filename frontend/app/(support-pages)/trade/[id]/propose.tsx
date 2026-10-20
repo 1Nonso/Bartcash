@@ -453,7 +453,7 @@ export default function ProposeTradeScreen() {
               <Ionicons name="trending-up" size={13} color={theme.ai} />
               <Text style={styles.valuationText}>{receiverValuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-                · AI Value
+                · Valuation
               </Text>
             </View>
           )}
@@ -776,7 +776,7 @@ export default function ProposeTradeScreen() {
           >
             <View style={styles.matchHeader}>
               <Ionicons name="sparkles" size={16} color={theme.ai} />
-              <Text style={[styles.matchTitle, { color: theme.ai }]}>AI Estimated Value</Text>
+              <Text style={[styles.matchTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
             </View>
 
             <View style={styles.matchValues}>

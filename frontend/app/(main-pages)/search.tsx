@@ -123,7 +123,7 @@ function SearchResultCard({ item, onPress }: SearchResultCardProps) {
             <Ionicons name="trending-up" size={11} color={Colors.ai} />
             <Text style={styles.valuationText}>{val}</Text>
             <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-              · AI Value
+              · Valuation
             </Text>
           </View>
         )}

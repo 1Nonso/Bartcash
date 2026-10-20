@@ -8,6 +8,7 @@ import {
    BARTCASH_ENTITY_TYPES,
    fromQlooTypes,
    type BartcashEntityType,
+   type QlooInsightEntity,
    type QlooResult,
    type QlooSearchEntity,
 } from './qloo';
@@ -251,7 +252,168 @@ export async function searchTaste(
    }
 }
 
-export async function defaultTasteQloo(): Promise<TasteSearchQloo> {
+export async function defaultTasteQloo(): Promise<TasteSearchQloo & TasteSuggestQloo> {
    const { qlooClient } = await import('./qloo');
    return qlooClient;
+}
+
+// ── Suggestions (Add Interests before any search) ────────────────────────────
+
+export const SUGGESTIONS_PER_SECTION = 10;
+const SUGGEST_TAKE = 15;
+const SIGNALS_PER_SOURCE = 5;
+const LISTED_BRANDS_SHOWN = 2;
+
+export const suggestionsQuerySchema = z.object({ type: entityType.optional() });
+
+export interface SuggestionSection {
+   key: 'listed' | 'for_you' | 'popular';
+   title: string;
+   entities: SearchEntity[];
+}
+
+export interface TasteSuggestQloo {
+   insights(args: {
+      filterType: BartcashEntityType;
+      signals: readonly string[];
+      take?: number;
+      purpose?: 'interactive' | 'background';
+   }): Promise<QlooResult<QlooInsightEntity[]>>;
+   popular(args: {
+      filterType: BartcashEntityType;
+      take?: number;
+      purpose?: 'interactive' | 'background';
+   }): Promise<QlooResult<QlooInsightEntity[]>>;
+}
+
+/** A related brand stored on item_tastes.related_entities. */
+interface RelatedEntity {
+   entity_id: string;
+   name: string;
+   tag_ids?: string[];
+}
+
+/** Drop entities shown in an earlier section, flag profile ones, cap the size. */
+export function finishSections(
+   sections: SuggestionSection[],
+   onProfile: Set<string>,
+   perSection = SUGGESTIONS_PER_SECTION,
+): SuggestionSection[] {
+   const seen = new Set<string>();
+   const out: SuggestionSection[] = [];
+   for (const s of sections) {
+      const entities: SearchEntity[] = [];
+      for (const e of s.entities) {
+         if (seen.has(e.qloo_entity_id)) continue;
+         seen.add(e.qloo_entity_id);
+         entities.push({ ...e, already_added: onProfile.has(e.qloo_entity_id) });
+         if (entities.length >= perSection) break;
+      }
+      if (entities.length > 0) out.push({ ...s, entities });
+   }
+   return out;
+}
+
+export function relatedToEntities(related: unknown): SearchEntity[] {
+   if (!Array.isArray(related)) return [];
+   return (related as RelatedEntity[])
+      .filter((r) => r && typeof r.entity_id === 'string' && typeof r.name === 'string')
+      .map((r) => ({
+         qloo_entity_id: r.entity_id,
+         name: r.name,
+         entity_type: 'brand' as const,
+         image_url: null,
+         // Only ids are stored for related brands; names are not needed later.
+         tags: keepTags((r.tag_ids ?? []).map((id) => ({ tag_id: id, name: '' }))),
+         already_added: false,
+      }));
+}
+
+function insightsToEntities(list: QlooInsightEntity[], type: BartcashEntityType): SearchEntity[] {
+   return list.map((e) => ({
+      qloo_entity_id: e.entity_id,
+      name: e.name,
+      entity_type: type,
+      image_url: e.image_url ?? null,
+      tags: keepTags(e.tags),
+      already_added: false,
+   }));
+}
+
+/**
+ * Suggestions for Add Interests (shown before any search):
+ *  - "Because you listed {brand}": related brands stored on the user's
+ *    listings (0 Qloo calls; All and Brands only),
+ *  - "Picked for your taste": one insights call for the type from the user's
+ *    listing brands and interests (non-brand types only),
+ *  - "Popular picks": the type's most popular entities (one call, shared).
+ * A section that fails is left out; this never errors.
+ */
+export async function getSuggestions(
+   qloo: TasteSuggestQloo,
+   userId: string,
+   type?: BartcashEntityType | undefined,
+): Promise<SuggestionSection[]> {
+   const [profile, listings] = await Promise.all([
+      db.userTasteEntity.findMany({
+         where: { userId },
+         select: { qlooEntityId: true },
+         orderBy: { createdAt: 'desc' },
+      }),
+      db.itemTaste.findMany({
+         where: {
+            status: 'resolved',
+            qlooEntityId: { not: null },
+            item: { userId, deletedAt: null, status: { not: 'draft' } },
+         },
+         select: { qlooEntityId: true, qlooEntityName: true, relatedEntities: true },
+         orderBy: { updatedAt: 'desc' },
+         take: SIGNALS_PER_SOURCE,
+      }),
+   ]);
+   const onProfile = new Set(profile.map((p) => p.qlooEntityId));
+   const sections: SuggestionSection[] = [];
+
+   if (!type || type === 'brand') {
+      const shownBrands = new Set<string>();
+      for (const l of listings) {
+         if (!l.qlooEntityName || shownBrands.has(l.qlooEntityName)) continue;
+         shownBrands.add(l.qlooEntityName);
+         sections.push({
+            key: 'listed',
+            title: `Because you listed ${l.qlooEntityName}`,
+            entities: relatedToEntities(l.relatedEntities),
+         });
+         if (shownBrands.size >= LISTED_BRANDS_SHOWN) break;
+      }
+   }
+
+   const signals = [
+      ...new Set([
+         ...listings.map((l) => l.qlooEntityId as string),
+         ...profile.slice(0, SIGNALS_PER_SOURCE).map((p) => p.qlooEntityId),
+      ]),
+   ];
+   if (type && type !== 'brand' && signals.length > 0) {
+      try {
+         const r = await qloo.insights({ filterType: type, signals, take: SUGGEST_TAKE, purpose: 'interactive' });
+         if (r.ok) {
+            sections.push({ key: 'for_you', title: 'Picked for your taste', entities: insightsToEntities(r.data, type) });
+         }
+      } catch {
+         // Left out.
+      }
+   }
+
+   const popularType = type ?? 'brand';
+   try {
+      const r = await qloo.popular({ filterType: popularType, take: SUGGEST_TAKE, purpose: 'interactive' });
+      if (r.ok) {
+         sections.push({ key: 'popular', title: 'Popular picks', entities: insightsToEntities(r.data, popularType) });
+      }
+   } catch {
+      // Left out.
+   }
+
+   return finishSections(sections, onProfile);
 }

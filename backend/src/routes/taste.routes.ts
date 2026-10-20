@@ -9,6 +9,7 @@ import * as tasteController from '../controllers/taste.controllers';
 const router = Router();
 
 router.get('/search', requireQloo, requireAuth, userLimiter(30), tasteController.search);
+router.get('/suggestions', requireQloo, requireAuth, userLimiter(30), tasteController.suggestions);
 router.get('/profile', requireQloo, requireAuth, userLimiter(60), tasteController.profile);
 router.put('/profile', requireQloo, requireAuth, userLimiter(60), tasteController.replace);
 

@@ -88,6 +88,7 @@ export function parseInsights(body: unknown): QlooInsightEntity[] | null {
          affinity: num(query.affinity),
          popularity: num(e.popularity),
          explain: query.explainability ?? null,
+         image_url: imageOf(e.properties),
       });
    }
    if (raw.length > 0 && out.length === 0) return null;

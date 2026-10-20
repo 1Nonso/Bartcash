@@ -86,6 +86,8 @@ export interface QlooInsightEntity {
    popularity: number | null;
    /** Raw explainability payload when requested; shape not yet verified. */
    explain: unknown;
+   /** Best-effort, as for search; absent in older fixtures. */
+   image_url?: string | null;
 }
 
 export interface QlooTagResult {

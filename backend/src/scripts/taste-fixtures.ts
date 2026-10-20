@@ -7,11 +7,14 @@ import assert from 'node:assert/strict';
 import { fromQlooTypes } from '../services/qloo';
 import {
    diffProfile,
+   finishSections,
    keepTags,
    MAX_ENTITIES,
    MAX_TAGS,
    profileBodySchema,
+   relatedToEntities,
    searchQuerySchema,
+   suggestionsQuerySchema,
    toSearchEntities,
 } from '../services/tasteProfile.service';
 
@@ -83,6 +86,36 @@ test('keepTags: kept types only, genre first, capped', () => {
    ]);
    const many = Array.from({ length: 80 }, (_, i) => t(`urn:tag:genre:brand:g${i}`));
    assert.equal(keepTags(many).length, MAX_TAGS);
+});
+
+test('Suggestions: related brands mapped, dedupe across sections, flags, cap, empty dropped', () => {
+   const related = relatedToEntities([
+      { entity_id: 'a', name: 'Apple', tag_ids: ['urn:tag:genre:brand:electronics', 'urn:tag:keyword:x'] },
+      { entity_id: 'b', name: 'Bose' },
+      { bad: true },
+   ]);
+   assert.deepEqual(related.map((e) => [e.qloo_entity_id, e.entity_type, e.image_url, e.tags.length]), [
+      ['a', 'brand', null, 1],
+      ['b', 'brand', null, 0],
+   ]);
+   assert.deepEqual(relatedToEntities(null), []);
+   const mk = (id: string) => ({ ...related[0]!, qloo_entity_id: id });
+   const out = finishSections(
+      [
+         { key: 'listed', title: 'Because you listed Sony', entities: [mk('a'), mk('b'), mk('c')] },
+         { key: 'for_you', title: 'Picked for your taste', entities: [mk('b'), mk('d')] },
+         { key: 'popular', title: 'Popular picks', entities: [mk('a')] },
+      ],
+      new Set(['c']),
+      2,
+   );
+   assert.deepEqual(out.map((s) => [s.key, s.entities.map((e) => [e.qloo_entity_id, e.already_added])]), [
+      ['listed', [['a', false], ['b', false]]],
+      ['for_you', [['d', false]]],
+   ]);
+   // c was cut by the cap before being seen; 'popular' had only a duplicate -> dropped.
+   assert.equal(suggestionsQuerySchema.safeParse({ type: 'video_game' }).success, false);
+   assert.ok(suggestionsQuerySchema.safeParse({}).success);
 });
 
 let failed = 0;

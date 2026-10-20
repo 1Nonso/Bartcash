@@ -339,6 +339,33 @@ export function createQlooClient(deps: QlooClientDeps) {
       },
 
       /** GET /v2/insights — related entities for a set of signal entities. */
+      /**
+       * GET /v2/insights with a type and no signals: that type's most popular
+       * entities. Qloo answers 400 without some filter, so a location is
+       * sent (verified Oct 20: Lagos works; the results are global anyway).
+       * Cached a day like other insights.
+       */
+      popular(
+         args: { filterType: BartcashEntityType; take?: number; location?: string } & CallOptions,
+      ): Promise<QlooResult<QlooInsightEntity[]>> {
+         const take = args.take ?? DEFAULT_TAKE;
+         if (!Number.isInteger(take) || take < 1 || take > MAX_CANDIDATES) {
+            throw new QlooUsageError(`take must be an integer from 1 to ${MAX_CANDIDATES}`);
+         }
+         return execute({
+            endpoint: 'insights',
+            path: '/v2/insights',
+            params: {
+               take: String(take),
+               'filter.type': toQlooType(args.filterType),
+               'filter.location.query': args.location ?? 'Lagos',
+            },
+            ttlMs: DAY_MS,
+            purpose: args.purpose ?? 'background',
+            parse: parseInsights,
+         });
+      },
+
       insights(args: InsightsArgs): Promise<QlooResult<QlooInsightEntity[]>> {
          const signals = cleanIds('signals', args.signals, MAX_SIGNALS);
          if (signals.length === 0) throw new QlooUsageError('insights needs at least one signal');

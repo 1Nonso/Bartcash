@@ -4,10 +4,12 @@ import z from 'zod';
 import {
    defaultTasteQloo,
    getProfile,
+   getSuggestions,
    profileBodySchema,
    replaceProfile,
    searchQuerySchema,
    searchTaste,
+   suggestionsQuerySchema,
 } from '../services/tasteProfile.service';
 
 // ============================================================================
@@ -40,6 +42,28 @@ export async function search(req: Request, res: Response) {
       success: true,
       message: 'Entities retrieved.',
       data: { entities: result.entities },
+   });
+}
+
+/** GET /taste/suggestions?type= — shown on Add Interests before a search. */
+export async function suggestions(req: Request, res: Response) {
+   const parsed = suggestionsQuerySchema.safeParse(req.query);
+   if (!parsed.success) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+         success: false,
+         message: ReasonPhrases.BAD_REQUEST,
+         errors: z.flattenError(parsed.error).fieldErrors,
+      });
+   }
+   const sections = await getSuggestions(
+      await defaultTasteQloo(),
+      req.userId as string,
+      parsed.data.type,
+   );
+   return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Suggestions retrieved.',
+      data: { sections },
    });
 }
 

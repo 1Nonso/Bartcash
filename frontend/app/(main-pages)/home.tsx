@@ -31,6 +31,7 @@ import { useAuthTheme } from "@/constants/useAuthTheme";
 import { timeAgo } from "@/constants/listing";
 import { getStoredUser } from "@/config/auth";
 import { getUnreadCount } from "@/config/notifications";
+import { getTasteProfile } from "@/config/taste";
 import type { MyItem } from "@/config/items";
 import {
   getMatches,
@@ -70,6 +71,8 @@ export default function HomeScreen() {
 
   const [firstName, setFirstName] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
+  // Interests on the taste profile; null until loaded (no card meanwhile).
+  const [tasteCount, setTasteCount] = useState<number | null>(null);
 
   const [lenses, setLenses] = useState<MyItem[] | null>(null);
   const [lensError, setLensError] = useState(false);
@@ -209,6 +212,9 @@ export default function HomeScreen() {
       getUnreadCount()
         .then(setUnread)
         .catch(() => {});
+      getTasteProfile()
+        .then((p) => setTasteCount(p.entity_count))
+        .catch(() => {});
       loadLensesRef.current();
       return () => stopPolling();
     }, [stopPolling]),
@@ -246,6 +252,7 @@ export default function HomeScreen() {
   );
   const browseAll = () => router.push("/(main-pages)/discover");
   const createListing = () => router.push("/(support-pages)/listing/create");
+  const openTaste = () => router.push("/(support-pages)/taste");
   const addWants = (id: string) =>
     router.push({ pathname: "/(support-pages)/listing/[id]/edit", params: { id } });
   const seeAll = (item: MyItem) =>
@@ -333,9 +340,31 @@ export default function HomeScreen() {
     </View>
   ) : null;
 
+  // "Tell Scout what you like" until the profile is active (3 interests).
+  const tasteCard =
+    tasteCount !== null && tasteCount < 3 && !noListings ? (
+      <TouchableOpacity
+        onPress={openTaste}
+        activeOpacity={0.85}
+        style={[styles.tasteCard, { backgroundColor: theme.aiSurface }]}
+      >
+        <Ionicons name="sparkles" size={18} color={theme.ai} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.tasteTitle, { color: theme.textPrimary }]}>Tell Scout what you like</Text>
+          <Text style={[styles.caption, { color: theme.textSecondary }]}>
+            {tasteCount === 0
+              ? "Add brands, music and films you love for sharper matches."
+              : `Add ${3 - tasteCount} more to turn on taste matching.`}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+      </TouchableOpacity>
+    ) : null;
+
   const listHeader = (
     <View>
       {header}
+      {tasteCard}
       {lensError && (
         <TouchableOpacity
           onPress={loadLenses}
@@ -378,6 +407,14 @@ export default function HomeScreen() {
           >
             <Text style={[styles.primaryBtnText, { color: theme.btnPrimaryText }]}>Create Listing</Text>
           </TouchableOpacity>
+          {tasteCount !== null && tasteCount < 3 && (
+            <TouchableOpacity
+              style={[styles.secondaryBtn, styles.stretch, { borderColor: theme.borderDefault }]}
+              onPress={openTaste}
+            >
+              <Text style={[styles.secondaryBtnText, { color: theme.textPrimary }]}>Set up taste profile</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={browseAll} style={styles.linkBtn}>
             <Text style={[styles.linkText, { color: theme.link }]}>Browse all listings</Text>
           </TouchableOpacity>
@@ -559,6 +596,17 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { ...Typography.buttonSm },
   linkBtn: { alignSelf: "center", paddingVertical: Spacing[2] },
+  stretch: { alignSelf: "stretch", alignItems: "center" },
+  tasteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing[3],
+    marginHorizontal: Layout.screenPadding,
+    marginBottom: Spacing[3],
+    padding: Spacing[3],
+    borderRadius: Radius.lg,
+  },
+  tasteTitle: { ...Typography.bodyMedium },
   linkText: { ...Typography.bodyMedium },
   footer: { alignItems: "center", paddingVertical: Spacing[3], gap: Spacing[2] },
 });

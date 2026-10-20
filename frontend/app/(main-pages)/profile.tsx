@@ -15,6 +15,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
+import { useFeatures } from "@/hooks/useFeatures";
 import {
   Colors,
   Layout,
@@ -40,6 +41,8 @@ interface UserProfile {
   averageRating: string;
   totalTrades: number;
   createdAt: string;
+  /** Flag on: interests on the taste profile. */
+  taste?: { entityCount: number; isActive: boolean };
 }
 
 interface Rating {
@@ -136,6 +139,7 @@ function StarRating({ score }: { score: number }) {
 export default function ProfileScreen() {
   const theme = useAuthTheme();
   const tabSpace = useTabBarSpace();
+  const { qloo } = useFeatures();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [listings, setListings] = useState<MyListing[]>([]);
@@ -436,6 +440,17 @@ export default function ProfileScreen() {
                 count: null,
                 onPress: () => router.push("/(support-pages)/notification"),
               },
+              // Taste profile (UI §13.6), flag on only.
+              ...(qloo
+                ? [
+                    {
+                      icon: "sparkles-outline",
+                      label: "Taste profile",
+                      count: profile?.taste?.entityCount ?? null,
+                      onPress: () => router.push("/(support-pages)/taste"),
+                    },
+                  ]
+                : []),
             ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
                 <TouchableOpacity
@@ -446,7 +461,7 @@ export default function ProfileScreen() {
                   <View
                     style={[
                       styles.menuIconWrap,
-                      { backgroundColor: Colors.gray[100] },
+                      { backgroundColor: theme.surfaceVariant },
                     ]}
                   >
                     <Ionicons
@@ -550,7 +565,7 @@ export default function ProfileScreen() {
                           style={[
                             styles.listingImage,
                             styles.listingImagePlaceholder,
-                            { backgroundColor: Colors.gray[100] },
+                            { backgroundColor: theme.surfaceVariant },
                           ]}
                         >
                           <Ionicons
@@ -699,7 +714,7 @@ export default function ProfileScreen() {
               <View
                 style={[
                   styles.menuIconWrap,
-                  { backgroundColor: Colors.gray[100] },
+                  { backgroundColor: theme.surfaceVariant },
                 ]}
               >
                 <Ionicons

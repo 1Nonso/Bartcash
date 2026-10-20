@@ -16,6 +16,8 @@ import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import { useFeatures } from "@/hooks/useFeatures";
+import { showToast } from "@/hooks/toast";
+import { resetGuides } from "@/components/guide/storage";
 import {
   Colors,
   Layout,
@@ -451,6 +453,16 @@ export default function ProfileScreen() {
                     },
                   ]
                 : []),
+              {
+                icon: "help-circle-outline",
+                label: "Replay tips",
+                count: null,
+                onPress: () => {
+                  resetGuides().then(() =>
+                    showToast("success", "Tips will show again as you go."),
+                  );
+                },
+              },
             ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
                 <TouchableOpacity

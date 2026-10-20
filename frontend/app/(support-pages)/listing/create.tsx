@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +29,8 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
 import {
   Category,
   CreateItemPayload,
@@ -93,6 +95,20 @@ function SectionCard({ icon, title, subtitle, children }: SectionCardProps) {
 
 export default function CreateListingScreen() {
   const theme = useAuthTheme();
+
+  // First-visit tour (components/guide): title, photos, then the ⓘ.
+  const photosRef = useRef<View>(null);
+  const titleRef = useRef<View>(null);
+  const infoRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      { target: titleRef, text: "Start with the brand and model. It drives your valuation and your matches." },
+      { target: photosRef, text: "Add a few clear photos. The first one is used for the valuation." },
+      { target: infoRef, text: "Tap here anytime for tips on a great listing." },
+    ],
+    [],
+  );
+  const tour = useTour("create", tourSteps, true);
   const insets = useSafeAreaInsets();
 
   // Form state
@@ -350,7 +366,11 @@ export default function CreateListingScreen() {
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           Create Listing
         </Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          <View ref={infoRef} collapsable={false}>
+            <InfoButton topic="listing" />
+          </View>
+        </View>
       </Animated.View>
 
       {/* ── Body ── */}
@@ -395,6 +415,7 @@ export default function CreateListingScreen() {
               </Text>
             </Text>
 
+            <View ref={photosRef} collapsable={false}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -457,6 +478,7 @@ export default function CreateListingScreen() {
                 </View>
               ))}
             </ScrollView>
+            </View>
 
             {errors.images && (
               <Text style={styles.errorText}>{errors.images}</Text>
@@ -512,6 +534,7 @@ export default function CreateListingScreen() {
             <Text style={[styles.fieldLabel, { color: theme.textPrimary }]}>
               Title <Text style={{ color: Colors.danger }}>*</Text>
             </Text>
+            <View ref={titleRef} collapsable={false}>
             <TextInput
               style={[
                 styles.input,
@@ -538,6 +561,7 @@ export default function CreateListingScreen() {
               onBlur={() => setTitleFocused(false)}
               maxLength={255}
             />
+            </View>
             {errors.title && (
               <Text style={styles.errorText}>{errors.title}</Text>
             )}
@@ -846,6 +870,7 @@ export default function CreateListingScreen() {
           )}
         </TouchableOpacity>
       </View>
+      {tour}
     </KeyboardAvoidingView>
   );
 }
@@ -872,7 +897,7 @@ const styles = StyleSheet.create({
   },
   backText: { ...Typography.body },
   headerTitle: { ...Typography.sectionTitle },
-  headerRight: { minWidth: 60 },
+  headerRight: { minWidth: 60, alignItems: "flex-end" },
 
   // Body
   bodyWrapper: { flex: 1 },

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -43,6 +43,8 @@ import {
   WantChip,
 } from "@/components/scout";
 import { getStoredUser } from "@/config/auth";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
 
 type ConfidenceLevel = "high" | "medium" | "low";
 
@@ -166,7 +168,8 @@ function ValuationCard({
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={theme.ai} />
-          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
           {valuation?.status === "failed"
@@ -209,7 +212,8 @@ function ValuationCard({
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={theme.ai} />
-          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
         </View>
         <View style={styles.valuationPending}>
           <ActivityIndicator size="small" color={theme.ai} />
@@ -256,7 +260,8 @@ function ValuationCard({
     <View style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}>
       <View style={styles.valuationHeader}>
         <Ionicons name="sparkles" size={16} color={theme.ai} />
-        <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
+        <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
       </View>
       <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
       <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
@@ -405,6 +410,18 @@ export default function ListingDetailScreen() {
   const { id, context } = useLocalSearchParams<{ id: string; context?: string }>();
 
   const [item, setItem] = useState<ItemDetail | null>(null);
+
+  // Opened from a match: a short tour of the Why card and Propose Trade.
+  const whyRef = useRef<View>(null);
+  const proposeRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      { target: whyRef, text: "Why Scout picked this: what fits, and whether they may want yours." },
+      { target: proposeRef, text: "Ready? Make an offer here. Scout never sends anything for you." },
+    ],
+    [],
+  );
+  const tour = useTour("match", tourSteps, !!context && !!item?.match_context);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -754,7 +771,9 @@ export default function ListingDetailScreen() {
           />
 
           {item.match_context && (
-            <WhyThisMatchesCard context={item.match_context} />
+            <View ref={whyRef} collapsable={false}>
+              <WhyThisMatchesCard context={item.match_context} />
+            </View>
           )}
 
           {item.description && (
@@ -940,9 +959,11 @@ export default function ListingDetailScreen() {
             <Text style={styles.ctaPrimaryText}>Edit Listing</Text>
           </TouchableOpacity>
         ) : item.status === "traded" ? null : (
+          <View ref={proposeRef} collapsable={false} style={styles.ctaWrap}>
           <TouchableOpacity
             style={[
               styles.ctaPrimary,
+              styles.ctaInWrap,
               {
                 backgroundColor: canProposeTrade
                   ? Colors.primary
@@ -958,8 +979,10 @@ export default function ListingDetailScreen() {
               {item.status === "in_trade" ? "In a Trade" : "Propose Trade"}
             </Text>
           </TouchableOpacity>
+          </View>
         )}
       </View>
+      {tour}
     </View>
   );
 }
@@ -1174,6 +1197,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing[3],
     borderTopWidth: 1,
   },
+  ctaWrap: { flex: 1 },
+  ctaInWrap: { flex: 0 },
   ctaPrimary: {
     flex: 1,
     flexDirection: "row",

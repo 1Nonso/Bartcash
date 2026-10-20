@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,8 @@ import {
 } from "@/config/items";
 import { goBack } from "@/hooks/navigation";
 import { useFeatures } from "@/hooks/useFeatures";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
 import { apiErrorMessage, setWants } from "@/config/wants";
 import WantPicker from "@/components/WantPicker";
 
@@ -70,6 +72,30 @@ export default function ReviewListingScreen() {
 
   // Wants (Qloo, UI §13.8). With the flag off the screen is unchanged.
   const { qloo } = useFeatures();
+
+  // First-visit tour (components/guide): valuation, wants (flag on), the ⓘ.
+  const valuationRef = useRef<View>(null);
+  const wantsRef = useRef<View>(null);
+  const infoRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      {
+        target: valuationRef,
+        text: "This is our AI's estimate of what your item is worth. Use it to set a fair value.",
+      },
+      ...(qloo
+        ? [
+            {
+              target: wantsRef,
+              text: "Pick up to 3 categories you'd take in exchange. Scout uses these to find your matches.",
+            },
+          ]
+        : []),
+      { target: infoRef, text: "Tap ⓘ or the Scout badge to see how these work." },
+    ],
+    [qloo],
+  );
+  const tour = useTour("review", tourSteps, !loading);
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [showPickError, setShowPickError] = useState(false);
@@ -257,7 +283,10 @@ export default function ReviewListingScreen() {
       >
         <View style={styles.valuationHeader}>
           <Ionicons name="sparkles" size={16} color={theme.ai} />
-          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <View ref={infoRef} collapsable={false}>
+            <InfoButton topic="valuation" color={theme.ai} />
+          </View>
         </View>
 
         {valuation?.status === "pending" && (
@@ -467,9 +496,12 @@ export default function ReviewListingScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
-        {renderValuation()}
+        <View ref={valuationRef} collapsable={false}>
+          {renderValuation()}
+        </View>
 
         {qloo && (
+          <View ref={wantsRef} collapsable={false}>
           <WantPicker
             itemId={item.id}
             picked={picked}
@@ -481,6 +513,7 @@ export default function ReviewListingScreen() {
             onChangeNote={setNote}
             showPickError={showPickError}
           />
+          </View>
         )}
 
         {/* Images preview */}
@@ -640,6 +673,7 @@ export default function ReviewListingScreen() {
           )}
         </TouchableOpacity>
       </View>
+      {tour}
     </View>
   );
 }

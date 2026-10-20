@@ -19,6 +19,7 @@ import { Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import type { CheckResult, ScoreLabelValue } from "@/config/items";
 import type { MatchEntry } from "@/config/matches";
+import { InfoSheet } from "@/components/guide/InfoSheet";
 
 type Theme = ReturnType<typeof useAuthTheme>;
 
@@ -41,13 +42,26 @@ function Thumb({ uri, style, iconSize }: { uri: string | null; style: object; ic
 
 // ─── ScoutBadge ───────────────────────────────────────────────────────────────
 
+/** Tapping the badge opens "How Scout works" (components/guide). */
 export function ScoutBadge({ style }: { style?: object }) {
   const theme = useAuthTheme();
+  const [open, setOpen] = useState(false);
   return (
-    <View style={[styles.scoutBadge, { backgroundColor: theme.aiLight }, style]}>
-      <Ionicons name="sparkles" size={12} color={theme.ai} />
-      <Text style={[styles.scoutBadgeText, { color: theme.ai }]}>Scout</Text>
-    </View>
+    <>
+      <TouchableOpacity
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="How Scout works"
+        style={[styles.scoutBadge, { backgroundColor: theme.aiLight }, style]}
+      >
+        <Ionicons name="sparkles" size={12} color={theme.ai} />
+        <Text style={[styles.scoutBadgeText, { color: theme.ai }]}>Scout</Text>
+        <Ionicons name="information-circle-outline" size={12} color={theme.ai} />
+      </TouchableOpacity>
+      <InfoSheet topic="scout" visible={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

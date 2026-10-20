@@ -11,7 +11,7 @@
  * The Taste lens ("People like you") comes with the taste profile step.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -24,6 +24,8 @@ import {
 } from "react-native";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
+import { useTour } from "@/components/guide/Tour";
+import { useWelcome } from "@/components/guide/Welcome";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
@@ -97,6 +99,23 @@ function HomeScreen() {
   const [matchError, setMatchError] = useState<string | null>(null);
 
   const requestId = useRef(0);
+
+  // First open: welcome card, then the Home tour (components/guide).
+  const welcome = useWelcome();
+  const lensesRef = useRef<View>(null);
+  const firstMatchRef = useRef<View>(null);
+  const badgeRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      { target: lensesRef, text: "These are your listings. Tap one to see who matches it." },
+      {
+        target: firstMatchRef,
+        text: "Scout's best matches for that listing. The label shows how close the fit is.",
+      },
+      { target: badgeRef, text: "Tap Scout anytime to see how matching works." },
+    ],
+    [],
+  );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -277,6 +296,13 @@ function HomeScreen() {
   const refreshing = polling || meta?.status === "refreshing";
   const isFallback = meta?.source === "fallback";
   const noListings = lenses !== null && lenses.length === 0;
+  // Waits for the welcome card and for listings; with none it waits for
+  // the user's first listing.
+  const tour = useTour(
+    "home",
+    tourSteps,
+    welcome.seen && !!lenses && lenses.length > 0 && !loadingMatches,
+  );
 
   // ── Render pieces ──────────────────────────────────────────────────────────
 
@@ -289,7 +315,9 @@ function HomeScreen() {
           </Text>
           <Text style={[styles.pageTitle, { color: theme.textPrimary }]}>Home</Text>
         </View>
-        <ScoutBadge style={styles.headerBadge} />
+        <View ref={badgeRef} collapsable={false} style={styles.headerBadge}>
+          <ScoutBadge />
+        </View>
         <TouchableOpacity
           style={[styles.iconBtn, { backgroundColor: theme.surface }]}
           onPress={() => router.push("/(support-pages)/notification")}
@@ -315,6 +343,7 @@ function HomeScreen() {
         ))}
       </ScrollView>
     ) : noListings ? null : (
+      <View ref={lensesRef} collapsable={false}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.lensRow}>
         {lenses.map((l) => (
           <LensCard
@@ -330,6 +359,7 @@ function HomeScreen() {
         ))}
         <AddListingLensCard onPress={createListing} />
       </ScrollView>
+      </View>
     );
 
   const resultsHeading = selected && hasWants(selected) ? (
@@ -509,8 +539,12 @@ function HomeScreen() {
       <FlatList
         data={matches}
         keyExtractor={(m) => m.item.id}
-        renderItem={({ item }) => (
-          <View style={styles.matchWrap}>
+        renderItem={({ item, index }) => (
+          <View
+            style={styles.matchWrap}
+            ref={index === 0 ? firstMatchRef : undefined}
+            collapsable={false}
+          >
             <MatchCard match={item} onPress={() => openMatch(item.item.id)} />
           </View>
         )}
@@ -523,6 +557,8 @@ function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
+      {welcome.node}
+      {tour}
     </View>
   );
 }

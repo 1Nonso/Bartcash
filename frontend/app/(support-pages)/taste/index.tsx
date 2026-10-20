@@ -172,7 +172,7 @@ export default function TasteProfileScreen() {
           <ScoutBadge />
         </View>
         <Text style={[styles.intro, { color: theme.textSecondary }]}>
-          Add things you love. Scout uses them to find people you will click with.
+          Add things you love. Scout uses them, with Qloo&apos;s taste data, to find listings and people you&apos;ll click with.
         </Text>
 
         <View style={styles.counterRow}>

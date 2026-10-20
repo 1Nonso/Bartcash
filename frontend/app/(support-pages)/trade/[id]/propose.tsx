@@ -28,6 +28,7 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { InfoButton } from "@/components/guide/InfoSheet";
 import {
   ItemDetail,
   getItemById,
@@ -383,7 +384,9 @@ export default function ProposeTradeScreen() {
             What would you trade for this item?
           </Text>
         </View>
-        <View style={{ minWidth: 60 }} />
+        <View style={{ minWidth: 60, alignItems: "flex-end" }}>
+          <InfoButton topic="trading" />
+        </View>
       </Animated.View>
 
       <Animated.ScrollView

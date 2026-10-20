@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
+import { useWelcome } from "@/components/guide/Welcome";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
@@ -223,6 +224,8 @@ export default function DashboardScreen() {
 
 function BrowseScreen() {
   const theme = useAuthTheme();
+  // First open (flag off): the welcome card (components/guide).
+  const welcome = useWelcome();
   const insets = useSafeAreaInsets();
   const tabSpace = useTabBarSpace();
 
@@ -637,6 +640,7 @@ function BrowseScreen() {
           columnWrapperStyle={styles.columnWrapper}
         />
       </Animated.View>
+      {welcome.node}
     </View>
   );
 }

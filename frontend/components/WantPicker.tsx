@@ -296,6 +296,9 @@ export default function WantPicker({
           What would you take in exchange?
         </Text>
       </View>
+      <Text style={[styles.why, { color: theme.textSecondary }]}>
+        Scout uses these to find people who have what you want.
+      </Text>
       <View style={styles.subRow}>
         <Text style={[styles.sub, { color: theme.textMuted }]}>
           Pick up to 3, most wanted first.
@@ -414,6 +417,7 @@ const styles = StyleSheet.create({
   container: { borderRadius: Radius.lg, padding: Spacing[4] },
   headerRow: { flexDirection: "row", alignItems: "center" },
   title: { ...Typography.bodyMedium, flex: 1 },
+  why: { ...Typography.caption, marginTop: 2 },
   subRow: {
     flexDirection: "row",
     alignItems: "center",

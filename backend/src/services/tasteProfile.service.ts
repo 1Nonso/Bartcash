@@ -14,6 +14,7 @@ import {
 } from './qloo';
 import { MIN_ACTIVE_ENTITIES } from './tasteSummary';
 import { queueMatchRefresh } from './matchRefresh.service';
+import { mapTagsToCategory } from './qloo/categoryMapper.service';
 
 export const MAX_ENTITIES = 25;
 export const SEARCH_DEFAULT_LIMIT = 10;
@@ -261,6 +262,47 @@ export async function defaultTasteQloo(): Promise<TasteSearchQloo & TasteSuggest
 
 export const SUGGESTIONS_PER_SECTION = 10;
 const SUGGEST_TAKE = 15;
+/** Popular brands are filtered to tradable ones, so ask for more. */
+const POPULAR_BRAND_TAKE = 50;
+
+const BRAND_GENRE = 'urn:tag:genre:brand:';
+/** Brands people don't own or trade (same spirit as the mapping prompt). */
+const NON_TRADABLE_BRAND_PREFIXES = [
+   'mobile_app',
+   'software',
+   'website',
+   'telecom',
+   'finance',
+   'bank',
+   'news',
+   'media',
+   'entertainment:media',
+   'streaming',
+   'food',
+   'beverage',
+   'restaurant',
+];
+
+/**
+ * A brand worth suggesting as an interest: it maps to a tradable category
+ * (fashion, electronics, sports, vehicles, home, …), or it is a sports club
+ * with no app / media / news / telecom / finance / food tag.
+ * (Qloo's global popular brands lead with CNN, Instagram, X, YouTube.)
+ */
+export function isTradableBrand(tags: { tag_id: string }[] | null | undefined): boolean {
+   const genres = (tags ?? [])
+      .map((t) => t.tag_id)
+      .filter((id) => id.startsWith(BRAND_GENRE))
+      .map((id) => id.slice(BRAND_GENRE.length));
+   // Maps to a tradable category: keep, even with software tags (HP, Samsung).
+   if (mapTagsToCategory(tags ?? []).status === 'mapped') return true;
+   // Otherwise only a sports club with no app / media tags (not leagues).
+   const nonTradable = genres.some((g) =>
+      NON_TRADABLE_BRAND_PREFIXES.some((p) => g === p || g.startsWith(`${p}:`)),
+   );
+   const club = genres.some((g) => g === 'sports_organization' || g.startsWith('sports_organization:'));
+   return club && !nonTradable;
+}
 const SIGNALS_PER_SOURCE = 5;
 const LISTED_BRANDS_SHOWN = 2;
 
@@ -318,6 +360,8 @@ export function relatedToEntities(related: unknown): SearchEntity[] {
    if (!Array.isArray(related)) return [];
    return (related as RelatedEntity[])
       .filter((r) => r && typeof r.entity_id === 'string' && typeof r.name === 'string')
+      // Same filter as popular brands: no apps, media, news, telecom, finance.
+      .filter((r) => isTradableBrand((r.tag_ids ?? []).map((id) => ({ tag_id: id }))))
       .map((r) => ({
          qloo_entity_id: r.entity_id,
          name: r.name,
@@ -407,9 +451,15 @@ export async function getSuggestions(
 
    const popularType = type ?? 'brand';
    try {
-      const r = await qloo.popular({ filterType: popularType, take: SUGGEST_TAKE, purpose: 'interactive' });
+      const isBrand = popularType === 'brand';
+      const r = await qloo.popular({
+         filterType: popularType,
+         take: isBrand ? POPULAR_BRAND_TAKE : SUGGEST_TAKE,
+         purpose: 'interactive',
+      });
       if (r.ok) {
-         sections.push({ key: 'popular', title: 'Popular picks', entities: insightsToEntities(r.data, popularType) });
+         const list = isBrand ? r.data.filter((e) => isTradableBrand(e.tags)) : r.data;
+         sections.push({ key: 'popular', title: 'Popular picks', entities: insightsToEntities(list, popularType) });
       }
    } catch {
       // Left out.

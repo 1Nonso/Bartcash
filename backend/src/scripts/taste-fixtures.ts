@@ -8,6 +8,7 @@ import { fromQlooTypes } from '../services/qloo';
 import {
    diffProfile,
    finishSections,
+   isTradableBrand,
    keepTags,
    MAX_ENTITIES,
    MAX_TAGS,
@@ -91,12 +92,14 @@ test('keepTags: kept types only, genre first, capped', () => {
 test('Suggestions: related brands mapped, dedupe across sections, flags, cap, empty dropped', () => {
    const related = relatedToEntities([
       { entity_id: 'a', name: 'Apple', tag_ids: ['urn:tag:genre:brand:electronics', 'urn:tag:keyword:x'] },
-      { entity_id: 'b', name: 'Bose' },
+      { entity_id: 'b', name: 'Bose', tag_ids: ['urn:tag:genre:brand:electronics:audio'] },
+      { entity_id: 'v', name: 'VSCO', tag_ids: ['urn:tag:genre:brand:mobile_app', 'urn:tag:genre:brand:software'] },
+      { entity_id: 'n', name: 'No tags' },
       { bad: true },
    ]);
    assert.deepEqual(related.map((e) => [e.qloo_entity_id, e.entity_type, e.image_url, e.tags.length]), [
       ['a', 'brand', null, 1],
-      ['b', 'brand', null, 0],
+      ['b', 'brand', null, 1],
    ]);
    assert.deepEqual(relatedToEntities(null), []);
    const mk = (id: string) => ({ ...related[0]!, qloo_entity_id: id });
@@ -116,6 +119,26 @@ test('Suggestions: related brands mapped, dedupe across sections, flags, cap, em
    // c was cut by the cap before being seen; 'popular' had only a duplicate -> dropped.
    assert.equal(suggestionsQuerySchema.safeParse({ type: 'video_game' }).success, false);
    assert.ok(suggestionsQuerySchema.safeParse({}).success);
+});
+
+test('isTradableBrand: tradable categories and clubs in; apps, media, leagues out', () => {
+   const b = (...g: string[]) => g.map((x) => ({ tag_id: `urn:tag:genre:brand:${x}` }));
+   // From the cached Qloo popular-brands list (Oct 20).
+   const cases: [string, ReturnType<typeof b>, boolean][] = [
+      ['CNN', b('mobile_app', 'website'), false],
+      ['Nike', b('fashion', 'fashion:footwear:sneaker:running'), true],
+      ['Instagram', b('mobile_app', 'software'), false],
+      ['Netflix', b('mobile_app:streaming_service', 'entertainment'), false],
+      ['The New York Times', b('mobile_app:news', 'entertainment:media:art'), false],
+      ['Christian Dior', b('fashion:formalwear', 'fashion:home_accessories'), true],
+      ['Playstation', b('electronics:gaming', 'electronics'), true],
+      ['FC Barcelona', b('sports_organization', 'sports_organization:soccer:spain'), true],
+      ['Premier League', b('mobile_app:sports', 'sports_organization'), false],
+      ['Unknown', b('website'), false],
+      ['Hp', b('software', 'electronics:computers_and_laptops'), true],
+   ];
+   for (const [name, tags, want] of cases) assert.equal(isTradableBrand(tags), want, name);
+   assert.equal(isTradableBrand(null), false);
 });
 
 let failed = 0;

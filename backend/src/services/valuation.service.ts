@@ -203,8 +203,7 @@ export async function runItemValuation(
          where: { itemId },
          data: {
             status: 'failed',
-            failedReason:
-               'No images available for valuation.',
+            failedReason: 'no_image',
          },
       });
       return;

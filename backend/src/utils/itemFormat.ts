@@ -1,5 +1,7 @@
 // Shared response shapes for items (API §16.3 ItemCard / OwnerRef).
 
+import { valuationFailureMessage } from './valuationFailure';
+
 export function formatValuation(
    valuation: any,
 ) {
@@ -12,7 +14,9 @@ export function formatValuation(
       confidence: valuation.confidence,
       status: valuation.status,
       failed_reason:
-         valuation.failedReason,
+         valuationFailureMessage(
+            valuation.failedReason,
+         ),
    };
 }
 

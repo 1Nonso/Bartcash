@@ -11,6 +11,8 @@ import {
    combine,
    keywords,
    pickTasteEntities,
+   qualifies,
+   scoreAll,
    sharedTags,
    tasteScores,
    ladderLevel,
@@ -121,7 +123,7 @@ test('Reasons by tier and want rank', () => {
    assert.equal(templateReason(s, cand(ELEC, { tier: 3 })), 'Recently listed');
 });
 
-test('rankMatches: score desc, then newest; unknown R is neutral 0.5', () => {
+test('scoreAll: score desc, then newest; unknown R is neutral 0.5', () => {
    const s = source();
    const a = cand(BOOK, { userId: 'ua' }); // W .85, R 1 -> .9
    const b = cand(FASH, { userId: 'ub' }); // W 1, R .2 -> .733
@@ -131,7 +133,7 @@ test('rankMatches: score desc, then newest; unknown R is neutral 0.5', () => {
       ['ua', new Map([[ELEC, 1]])],
       ['ub', new Map([[SPORT, 1]])],
    ]);
-   const r = rankMatches(s, [a, b, c, d], owners, W);
+   const r = scoreAll(s, [a, b, c, d], owners, W);
    assert.deepEqual(
       r.map((m) => [m.candidateItemId, m.score]),
       [
@@ -141,36 +143,56 @@ test('rankMatches: score desc, then newest; unknown R is neutral 0.5', () => {
          [b.id, 0.733],
       ],
    );
-   assert.deepEqual(r.map((m) => m.rank), [1, 2, 3, 4]);
    assert.ok(r.every((m) => m.source === 'fallback' && m.tasteAffinity === null));
    // Stored R stays null for unknown owners.
    assert.equal(r.find((m) => m.candidateItemId === c.id)!.reciprocalFit, null);
+   // Only a has a second signal (its owner wants electronics): one match.
+   assert.deepEqual(rankMatches(s, [a, b, c, d], owners, W).map((m) => [m.candidateItemId, m.rank]), [[a.id, 1]]);
+});
+
+test('Match rule: tier 1/2 plus R > 0.20, T >= 0.90 or a note word', () => {
+   const q = (tier: 1 | 2 | 3, reciprocal: number | null, taste: number | null, note = false) =>
+      qualifies({ tier, reciprocal, taste, note });
+   assert.equal(q(1, null, null), false); // wanted category alone
+   assert.equal(q(1, 0.2, null), false); // their wants exclude ours
+   assert.equal(q(1, 0.7, null), true); // they want ours at rank 3
+   assert.equal(q(1, null, 0.899), false);
+   assert.equal(q(1, null, 0.9), true);
+   assert.equal(q(1, null, null, true), true); // note word
+   assert.equal(q(2, null, null), false); // suggested alone
+   assert.equal(q(2, 1, null), true);
+   assert.equal(q(2, null, 0.95), true);
+   assert.equal(q(3, 1, 1, true), false); // tier 3 never
 });
 
 test('rankMatches: equal scores order newest first', () => {
-   const old = cand(FASH, { createdAt: new Date('2026-10-01') });
-   const fresh = cand(FASH, { createdAt: new Date('2026-10-10') });
-   const r = rankMatches(source(), [old, fresh], new Map(), W);
+   const owners = new Map([['u', new Map([[ELEC, 1]])]]);
+   const old = cand(FASH, { userId: 'u', createdAt: new Date('2026-10-01') });
+   const fresh = cand(FASH, { userId: 'u', createdAt: new Date('2026-10-10') });
+   const r = rankMatches(source(), [old, fresh], owners, W);
    assert.deepEqual(r.map((m) => m.candidateItemId), [fresh.id, old.id]);
 });
 
 test('rankMatches keeps the top 50', () => {
-   const many = Array.from({ length: 70 }, () => cand(FASH));
-   const r = rankMatches(source(), many, new Map(), W);
+   const many = Array.from({ length: 70 }, () => cand(FASH, { userId: 'u' }));
+   const r = rankMatches(source(), many, new Map([['u', new Map([[ELEC, 2]])]]), W);
    assert.equal(r.length, MAX_MATCHES);
    assert.equal(r.at(-1)!.rank, 50);
 });
 
-test('Level 3 (no wants): recency only, no W/R, score 0', () => {
+test('No wants: no matches (level 3)', () => {
    const s = source({ wantRanks: new Map(), unpickedSuggested: new Set() });
-   const old = cand(FASH, { tier: 3, createdAt: new Date('2026-10-01') });
-   const fresh = cand(BOOK, { tier: 3, createdAt: new Date('2026-10-05') });
-   const r = rankMatches(s, [old, fresh], new Map([[old.userId, new Map([[ELEC, 1]])]]), W);
-   assert.deepEqual(r.map((m) => m.candidateItemId), [fresh.id, old.id]);
-   assert.ok(r.every((m) => m.score === 0 && m.wantsFit === null && m.reciprocalFit === null));
-   assert.equal(ladderLevel(s, 2), 3);
+   const r = rankMatches(s, [cand(FASH, { tier: 1 })], new Map([['x', new Map([[ELEC, 1]])]]), W);
+   assert.equal(r.length, 0);
+   assert.equal(ladderLevel(s, 0), 3);
    assert.equal(ladderLevel(source(), 2), 2);
    assert.equal(ladderLevel(source(), 0), 4);
+});
+
+test('Note word qualifies a tier-2 candidate', () => {
+   const s = source({ note: 'Dumbbells please' });
+   const r = rankMatches(s, [cand(SPORT, { tier: 2, title: 'Adjustable Dumbbells' }), cand(SPORT, { tier: 2 })], new Map(), W);
+   assert.deepEqual(r.map((m) => m.wantsFit), [0.5]);
 });
 
 test('pickTasteEntities: distinct, in order, signals skipped, capped', () => {
@@ -183,6 +205,16 @@ test('pickTasteEntities: distinct, in order, signals skipped, capped', () => {
    ];
    assert.deepEqual(pickTasteEntities(list, new Set(['S'])), ['E1', 'E2']);
    assert.deepEqual(pickTasteEntities(list, new Set(['S']), 1), ['E1']);
+});
+
+test('pickTasteEntities keeps room for tier-2 brands', () => {
+   const t1 = Array.from({ length: 60 }, (_, i) => cand(FASH, { entityId: `A${i}` }));
+   const t2 = Array.from({ length: 5 }, (_, i) => cand(SPORT, { tier: 2, entityId: `B${i}` }));
+   const picked = pickTasteEntities([...t1, ...t2], new Set());
+   assert.equal(picked.length, 50);
+   assert.deepEqual(picked.filter((e) => e.startsWith('B')), ['B0', 'B1', 'B2', 'B3', 'B4']);
+   // Few tier-2 brands: tier 1 fills the rest.
+   assert.equal(picked.filter((e) => e.startsWith('A')).length, 45);
 });
 
 test('tasteScores: raw affinity, clamped; signal brand 1; missing null', () => {
@@ -198,16 +230,16 @@ test('tasteScores: raw affinity, clamped; signal brand 1; missing null', () => {
    assert.deepEqual([...odd.values()], [1, 0]);
 });
 
-test('rankMatches with T: missing T neutral 0.5, source qloo, taste clause', () => {
+test('scoreAll with T: missing T neutral 0.5, source qloo, taste clause', () => {
    const s = source({ entityName: 'Sony' });
    const hi = cand(FASH, { userId: 'u1' }); // W 1, T 1, R .5 -> (0.4+0.3+0.1)/0.9 = .889
    const lo = cand(FASH, { userId: 'u2' }); // W 1, T 0, R .5 -> 0.5/0.9 = .556
    const nt = cand(FASH, { userId: 'u3' }); // W 1, T null (0.5), R .5 -> 0.65/0.9 = .722
-   const r = rankMatches(s, [hi, lo, nt], new Map(), W, new Map([[hi.id, 1], [lo.id, 0], [nt.id, null]]));
-   assert.deepEqual(r.map((m) => [m.candidateItemId, m.score, m.source]), [
-      [hi.id, 0.889, 'qloo'],
-      [nt.id, 0.722, 'fallback'],
-      [lo.id, 0.556, 'qloo'],
+   const r = scoreAll(s, [hi, lo, nt], new Map(), W, new Map([[hi.id, 1], [lo.id, 0], [nt.id, null]]));
+   assert.deepEqual(r.map((m) => [m.candidateItemId, m.score, m.source, m.qualifies]), [
+      [hi.id, 0.889, 'qloo', true],
+      [nt.id, 0.722, 'fallback', false],
+      [lo.id, 0.556, 'qloo', false],
    ]);
    assert.equal(r[0]!.reason, 'Matches your top want: Fashion · popular with Sony fans');
    assert.equal(r[2]!.reason, 'Matches your top want: Fashion');
@@ -239,14 +271,16 @@ test('Explanation: checked results, shared tags, label and source', () => {
 });
 
 test('rankMatches stores the explanation on every row', () => {
-   const r = rankMatches(source(), [cand(FASH), cand(SPORT, { tier: 2 })], new Map(), W);
+   const owners = new Map([['u', new Map([[ELEC, 3]])]]);
+   const r = rankMatches(source(), [cand(FASH, { userId: 'u' }), cand(SPORT, { tier: 2, userId: 'u' })], owners, W);
+   assert.equal(r.length, 2);
    assert.ok(r.every((m) => m.explanation.reason === m.reason && m.explanation.source === 'fallback'));
-   // W 1 and R unknown: 0.833, good.
-   assert.equal(r[0]!.explanation.score_label, 'good');
+   // W 1, R .7: 0.9, strong. Tier 2 (W .4, R .7): 0.5, possible.
+   assert.deepEqual(r.map((m) => m.explanation.score_label), ['strong', 'possible']);
 });
 
 test('No taste for the set: T dropped, not neutral', () => {
-   const r = rankMatches(source(), [cand(FASH)], new Map(), W, null);
+   const r = scoreAll(source(), [cand(FASH)], new Map(), W, null);
    assert.equal(r[0]!.score, 0.833);
 });
 

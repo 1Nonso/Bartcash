@@ -7,7 +7,6 @@ import { matchConfig } from '../config/match.config';
 import { getShownSuggestionIds } from './wantSuggestions.service';
 import {
    ladderLevel,
-   MIN_POOL,
    pickTasteEntities,
    rankMatches,
    scoreAll,
@@ -94,22 +93,18 @@ async function loadTier(
    });
 }
 
-/** Pool tiers 1 to 3: each later tier only when the pool is still small. */
+/** Pool tiers 1 and 2 (Oct 20: tier 3, any other listing, is gone). */
 async function loadCandidates(
    source: MatchSource,
    wantIds: string[],
    unpicked: string[],
 ): Promise<CandidateInput[]> {
-   if (wantIds.length === 0) return loadTier(source.userId, 3, null, []);
-
-   const pool = await loadTier(source.userId, 1, wantIds, []);
-   if (pool.length < MIN_POOL) {
-      pool.push(...(await loadTier(source.userId, 2, unpicked, [])));
-   }
-   if (pool.length < MIN_POOL) {
-      pool.push(...(await loadTier(source.userId, 3, null, pool.map((c) => c.id))));
-   }
-   return pool;
+   if (wantIds.length === 0) return [];
+   const [tier1, tier2] = await Promise.all([
+      loadTier(source.userId, 1, wantIds, []),
+      loadTier(source.userId, 2, unpicked, []),
+   ]);
+   return [...tier1, ...tier2];
 }
 
 /** Each candidate owner's wants across their available items (best rank per category). */
@@ -222,7 +217,7 @@ export async function computeMatches(
    const rows = rankMatches(input, candidates, ownerWants, weights, taste);
    return {
       rows,
-      level: ladderLevel(input, candidates.length, rows.some((r) => r.tasteAffinity !== null)),
+      level: ladderLevel(input, rows.length, rows.some((r) => r.tasteAffinity !== null)),
       taste: tasteNote,
    };
 }

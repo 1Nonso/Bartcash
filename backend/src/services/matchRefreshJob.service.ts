@@ -1,6 +1,6 @@
 // The match-refresh job (FLOW §10.11): rank the source item's matches (with
 // taste T from one Qloo call) and replace its match_results rows in one
-// transaction. Owner compatibility (O) is not computed yet.
+// transaction. Owner compatibility (O) comes from taste_compatibilities.
 
 import { db } from '../config/db.config';
 import type { Prisma } from '../generated/prisma/client';

@@ -76,6 +76,13 @@ export interface CandidateInput {
 /** Wants on the candidate owner's available items: categoryId → best rank. */
 export type OwnerWants = Map<string, Map<string, number>>;
 
+/**
+ * Component O per candidate owner (DB §10.8): the stored pair score scaled
+ * to 0 to 1, 0 when both profiles are active but share too little, null
+ * when either profile is inactive. `shared` is shown as shared_interests.
+ */
+export type OwnerFits = Map<string, { o: number | null; shared: unknown[] }>;
+
 export interface ScoredMatch {
    candidateItemId: string;
    rank: number;
@@ -263,6 +270,8 @@ export function buildExplanation(args: {
    taste: number | null;
    reciprocal: number | null;
    tags: TagRef[];
+   owner?: number | null;
+   shared?: unknown[];
 }): MatchExplanation {
    return {
       score_label: scoreLabel(args.score, args.tier),
@@ -271,10 +280,9 @@ export function buildExplanation(args: {
          { key: 'wants_fit', label: 'Fits what you want', result: checkResult(args.wants) },
          { key: 'taste_fit', label: 'Similar taste', result: checkResult(args.taste) },
          { key: 'reciprocal_fit', label: 'They may want yours', result: checkResult(args.reciprocal) },
-         // Needs taste profiles (Phase 4, taste profile step).
-         { key: 'shared_interests', label: 'Shared interests', result: 'unknown' },
+         { key: 'shared_interests', label: 'Shared interests', result: checkResult(args.owner ?? null) },
       ],
-      shared_interests: [],
+      shared_interests: args.shared ?? [],
       shared_tags: args.tags,
       source: args.taste !== null ? 'qloo' : 'fallback',
    };
@@ -334,7 +342,7 @@ export function tasteScores(
    return out;
 }
 
-/** Fallback ladder level, for logs: 1 with T (O is never set yet), 2 without, 3 no wants (no matches), 4 no matches. */
+/** Fallback ladder level, for logs: 1 with T, 2 without, 3 no wants (no matches), 4 no matches. */
 export function ladderLevel(
    source: SourceInput,
    candidateCount: number,
@@ -358,6 +366,7 @@ export function scoreAll(
    ownerWants: OwnerWants,
    weights: MatchWeights,
    taste: Map<string, number | null> | null = null,
+   owners: OwnerFits | null = null,
 ): ScoredCandidate[] {
    const noWants = source.wantRanks.size === 0;
    const noteWords = keywords(source.note);
@@ -368,16 +377,18 @@ export function scoreAll(
       const t = noWants ? null : (taste?.get(c.id) ?? null);
       // With taste for the set, a missing T is neutral; without it, T is dropped.
       const tScore = taste ? (t ?? TASTE_UNKNOWN) : null;
+      const fit = noWants ? undefined : owners?.get(c.userId);
+      const o = fit?.o ?? null;
       const score = noWants
          ? 0
          : combine(
-              { wants: w, taste: tScore, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: null },
+              { wants: w, taste: tScore, reciprocal: r ?? RECIPROCAL_UNKNOWN, owner: o },
               weights,
            );
       const ok =
          !noWants &&
          qualifies({ tier: c.tier, reciprocal: r, taste: t, note: noteHit(c.title, noteWords) });
-      return { c, w, r, t, score, ok };
+      return { c, w, r, t, o, shared: fit?.shared ?? [], score, ok };
    });
 
    scored.sort(
@@ -387,7 +398,7 @@ export function scoreAll(
          (a.c.id < b.c.id ? 1 : -1),
    );
 
-   return scored.map(({ c, w, r, t, score, ok }) => {
+   return scored.map(({ c, w, r, t, o, shared, score, ok }) => {
       const reason = templateReason(source, c, t);
       return {
          qualifies: ok,
@@ -396,7 +407,7 @@ export function scoreAll(
          wantsFit: w,
          tasteAffinity: t,
          reciprocalFit: r,
-         ownerCompatibility: null,
+         ownerCompatibility: o,
          poolTier: c.tier,
          source: t !== null ? 'qloo' : 'fallback',
          reason,
@@ -408,6 +419,8 @@ export function scoreAll(
             taste: t,
             reciprocal: r,
             tags: sharedTags(source.tags, c.tags),
+            owner: o,
+            shared,
          }),
       };
    });
@@ -420,8 +433,9 @@ export function rankMatches(
    ownerWants: OwnerWants,
    weights: MatchWeights,
    taste: Map<string, number | null> | null = null,
+   owners: OwnerFits | null = null,
 ): ScoredMatch[] {
-   return scoreAll(source, candidates, ownerWants, weights, taste)
+   return scoreAll(source, candidates, ownerWants, weights, taste, owners)
       .filter((m) => m.qualifies)
       .slice(0, MAX_MATCHES)
       .map(({ qualifies: _q, ...m }, i) => ({ ...m, rank: i + 1 }));

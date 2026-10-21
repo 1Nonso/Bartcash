@@ -32,6 +32,10 @@ export async function startQueue(): Promise<PgBoss> {
          QUEUES.MATCH_REFRESH,
          { policy: 'short' },
       );
+      await boss.createQueue(
+         QUEUES.TASTE_COMPAT,
+         { policy: 'short' },
+      );
       started = true;
    }
    return boss;

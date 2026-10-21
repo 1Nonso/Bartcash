@@ -8,6 +8,8 @@ import z from 'zod';
 import { db } from '../config/db.config';
 import { groqJson as defaultGroqJson, type GroqJsonFn } from './groqJson';
 import { getMatchContext } from './matchContext.service';
+import { loadOwnerFits } from './matchCandidates.service';
+import type { SharedEntity } from './tasteCompat';
 
 export const MESSAGE_MAX = 500;
 export const MESSAGE_MIN = 20;
@@ -81,6 +83,8 @@ export function messagePrompt(f: {
    target: string;
    topUp: number;
    theyWant: string | null;
+   /** An interest on both people's taste profiles. */
+   shared?: string | null;
 }): string {
    return [
       'You write a short, friendly opening message from one person to another on a barter marketplace.',
@@ -90,6 +94,7 @@ export function messagePrompt(f: {
       f.theyWant
          ? `The receiver has said they would take items in ${JSON.stringify(f.theyWant)}, which is what the sender is offering.`
          : '',
+      f.shared ? `Both people list ${JSON.stringify(f.shared)} among their interests; you may mention it once.` : '',
       'Use only these facts. Do not invent condition, extras, meeting places or promises.',
       'Do not mention cash unless a cash amount is given above. Do not mention apps, algorithms, matching, scores or categories by name except as stated.',
       `At most ${MESSAGE_MAX} characters, 2 or 3 sentences, plain text, no links, no emojis.`,
@@ -122,7 +127,7 @@ export interface OfferDraft {
    drafted_by: 'scout' | 'template';
    value_note: string | null;
    rationale: string;
-   shared_interests: unknown[];
+   shared_interests: SharedEntity[];
 }
 
 export type DraftResult =
@@ -191,10 +196,21 @@ export async function draftOffer(
          ? ((await db.category.findUnique({ where: { id: source.categoryId }, select: { name: true } }))?.name ?? null)
          : null;
 
+   // Interests both owners share (stored taste compatibility, DB §10.8).
+   const fits = await loadOwnerFits(callerId, [target.userId]);
+   const shared = (fits?.get(target.userId)?.shared ?? []) as SharedEntity[];
+
    let message: string | null = null;
    let groqOutcome = 'ok';
    const res = await withLimit(
-      groq(messagePrompt({ name, offered: source.title, target: target.title, topUp, theyWant }), validateMessage, {
+      groq(messagePrompt({
+         name,
+         offered: source.title,
+         target: target.title,
+         topUp,
+         theyWant,
+         shared: shared[0]?.name ?? null,
+      }), validateMessage, {
          maxTokens: MESSAGE_MAX_TOKENS,
       }),
       GROQ_LIMIT_MS,
@@ -221,8 +237,7 @@ export async function draftOffer(
          drafted_by: draftedBy,
          value_note: note,
          rationale: clip(reason ?? `Your ${source.title} for their ${target.title}.`, RATIONALE_MAX),
-         // Interests the two owners share need the taste-compat job.
-         shared_interests: [],
+         shared_interests: shared,
       },
    };
 }

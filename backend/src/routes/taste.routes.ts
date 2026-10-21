@@ -12,5 +12,16 @@ router.get('/search', requireQloo, requireAuth, userLimiter(30), tasteController
 router.get('/suggestions', requireQloo, requireAuth, userLimiter(30), tasteController.suggestions);
 router.get('/profile', requireQloo, requireAuth, userLimiter(60), tasteController.profile);
 router.put('/profile', requireQloo, requireAuth, userLimiter(60), tasteController.replace);
+router.get('/compatible-users', requireQloo, requireAuth, userLimiter(60), tasteController.compatibleUsers);
+
+/** Mounted at /api: GET /users/:id/taste-compatibility (API §16.4). */
+export const userTasteRouter = Router();
+userTasteRouter.get(
+   '/users/:id/taste-compatibility',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   tasteController.pairCompatibility,
+);
 
 export default router;

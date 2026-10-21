@@ -12,6 +12,7 @@ import {
    scoreAll,
    tasteScores,
    type CandidateInput,
+   type OwnerFits,
    type OwnerWants,
    type PoolTier,
    type ScoredMatch,
@@ -19,6 +20,8 @@ import {
    type TagRef,
 } from './matchScoring';
 import { fetchAffinities, type MatchQloo } from './matchTaste.service';
+import { MIN_ACTIVE_ENTITIES } from './tasteSummary';
+import { ownerScore, readShared, SHOWN_MAX } from './tasteCompat';
 
 /** Newest items taken per tier. */
 export const TIER_TAKE = 200;
@@ -127,6 +130,47 @@ export async function loadOwnerWants(ownerIds: string[]): Promise<OwnerWants> {
 }
 
 /**
+ * Component O for each candidate owner from the stored taste_compatibilities
+ * (DB §10.8). Null when the source owner's profile is inactive.
+ */
+export async function loadOwnerFits(sourceOwnerId: string, ownerIds: string[]): Promise<OwnerFits | null> {
+   const counts = await db.userTasteEntity.groupBy({
+      by: ['userId'],
+      where: { userId: { in: [sourceOwnerId, ...ownerIds] } },
+      _count: { _all: true },
+   });
+   const active = new Set(counts.filter((c) => c._count._all >= MIN_ACTIVE_ENTITIES).map((c) => c.userId));
+   if (!active.has(sourceOwnerId)) return null;
+
+   const pairs = await db.tasteCompatibility.findMany({
+      where: {
+         OR: [
+            { userAId: sourceOwnerId, userBId: { in: ownerIds } },
+            { userBId: sourceOwnerId, userAId: { in: ownerIds } },
+         ],
+      },
+      select: { userAId: true, userBId: true, score: true, sharedEntities: true },
+   });
+   const byOwner = new Map(pairs.map((p) => [p.userAId === sourceOwnerId ? p.userBId : p.userAId, p]));
+
+   const out: OwnerFits = new Map();
+   for (const id of ownerIds) {
+      if (!active.has(id)) {
+         out.set(id, { o: null, shared: [] });
+         continue;
+      }
+      const p = byOwner.get(id);
+      out.set(
+         id,
+         p
+            ? { o: ownerScore(Number(p.score)), shared: readShared(p.sharedEntities).slice(0, SHOWN_MAX) }
+            : { o: 0, shared: [] },
+      );
+   }
+   return out;
+}
+
+/**
  * Ranks matches for an available source item. With `qloo` (the job only),
  * adds component T from one batched insights call; without it, or when
  * Qloo is unavailable, T is null (fallback level 2).
@@ -170,10 +214,11 @@ export async function computeMatches(
    const { wantRanks } = input;
 
    const candidates = await loadCandidates(source, [...wantRanks.keys()], unpicked);
-   const ownerWants =
+   const ownerIds = [...new Set(candidates.map((c) => c.userId))];
+   const [ownerWants, owners] =
       wants.length === 0
-         ? new Map()
-         : await loadOwnerWants([...new Set(candidates.map((c) => c.userId))]);
+         ? [new Map() as OwnerWants, null]
+         : await Promise.all([loadOwnerWants(ownerIds), loadOwnerFits(source.userId, ownerIds)]);
 
    const weights = matchConfig.weights;
    let taste: Map<string, number | null> | null = null;
@@ -192,7 +237,7 @@ export async function computeMatches(
       const signalSet = new Set(signals);
       // Best W/R first, so the 50 brands sent are the likeliest matches.
       const byId = new Map(candidates.map((c) => [c.id, c]));
-      const ordered = scoreAll(input, candidates, ownerWants, weights).map(
+      const ordered = scoreAll(input, candidates, ownerWants, weights, null, owners).map(
          (m) => byId.get(m.candidateItemId)!,
       );
       const entityIds = pickTasteEntities(ordered, signalSet);
@@ -214,7 +259,7 @@ export async function computeMatches(
       }
    }
 
-   const rows = rankMatches(input, candidates, ownerWants, weights, taste);
+   const rows = rankMatches(input, candidates, ownerWants, weights, taste, owners);
    return {
       rows,
       level: ladderLevel(input, rows.length, rows.some((r) => r.tasteAffinity !== null)),

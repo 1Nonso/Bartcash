@@ -5,6 +5,7 @@
 import { db } from '../config/db.config';
 import { matchConfig } from '../config/match.config';
 import {
+   loadOwnerFits,
    loadOwnerWants,
    loadSourceInput,
    TASTE_SELECT,
@@ -123,7 +124,10 @@ export async function getMatchContext(
       loadSourceInput(context),
       db.itemTaste.findUnique({ where: { itemId: candidate.id }, ...TASTE_SELECT }),
    ]);
-   const ownerWants = await loadOwnerWants([candidate.userId]);
+   const [ownerWants, owners] = await Promise.all([
+      loadOwnerWants([candidate.userId]),
+      loadOwnerFits(context.userId, [candidate.userId]),
+   ]);
    const tier: PoolTier = input.wantRanks.has(candidate.categoryId)
       ? 1
       : input.unpickedSuggested.has(candidate.categoryId)
@@ -135,6 +139,8 @@ export async function getMatchContext(
       [{ ...candidate, tier, entityId: t.entityId, tags: t.tags }],
       ownerWants,
       matchConfig.weights,
+      null,
+      owners,
    );
    // Only when the listing has no matches yet: a candidate outside the top
    // 50 is not a reason to refresh.

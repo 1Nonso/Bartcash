@@ -168,9 +168,10 @@ export async function getProfile(userId: string): Promise<ProfileData> {
 
 /**
  * Replace the profile in one transaction: delete removed rows, insert new
- * ones, leave unchanged rows (and their saved tags and dates) alone. Then
- * refresh the user's matches, since T uses their recent taste entities.
- * (The taste-compat job would do this; it does not exist yet.)
+ * ones, leave unchanged rows (and their saved tags and dates) alone, and
+ * mark the user's compatibility pairs stale. The caller then queues the
+ * taste-compat job, which recomputes the pairs and refreshes the user's
+ * matches (T and O read the profile).
  */
 export async function replaceProfile(userId: string, wanted: EntityInput[]): Promise<ProfileData> {
    await db.$transaction(async (tx) => {
@@ -197,17 +198,24 @@ export async function replaceProfile(userId: string, wanted: EntityInput[]): Pro
             })),
          });
       }
+      await tx.tasteCompatibility.updateMany({
+         where: { OR: [{ userAId: userId }, { userBId: userId }] },
+         data: { stale: true },
+      });
       await tx.user.update({ where: { id: userId }, data: { tasteUpdatedAt: new Date() } });
    });
 
+   return getProfile(userId);
+}
+
+/** Refresh the user's matches directly (when the taste-compat job can't be queued). */
+export async function refreshMatchesNow(userId: string): Promise<void> {
    // Only listings with wants can have matches.
    const items = await db.item.findMany({
       where: { userId, status: 'available', deletedAt: null, wants: { some: {} } },
       select: { id: true },
    });
    for (const i of items) await queueMatchRefresh(i.id, 'taste_profile');
-
-   return getProfile(userId);
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────

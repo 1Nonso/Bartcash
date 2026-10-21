@@ -392,6 +392,18 @@ function WhyThisMatchesCard({ context }: { context: MatchContext }) {
           <CheckRow key={c.key} label={c.label} result={c.result} />
         ))}
       </View>
+      {context.shared_interests.length > 0 && (
+        <>
+          <Text style={[styles.whyTagsLabel, { color: theme.textSecondary }]}>
+            You both like
+          </Text>
+          <View style={styles.chipWrap}>
+            {context.shared_interests.map((e) => (
+              <TagChip key={e.qloo_entity_id} name={e.name} />
+            ))}
+          </View>
+        </>
+      )}
       {context.shared_tags.length > 0 && (
         <>
           <Text style={[styles.whyTagsLabel, { color: theme.textSecondary }]}>

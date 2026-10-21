@@ -1,6 +1,7 @@
 /**
  * Scout UI building blocks (UI spec §13.2): ScoutBadge, ScoreLabel,
- * InlineRefreshNote, LensCard, MatchCard, CheckRow and WantChip.
+ * InlineRefreshNote, LensCard, MatchCard, CheckRow, WantChip, TagChip and
+ * CompatibilityPill.
  * Copy rules: never show numeric scores; with a fallback source, avoid
  * "taste" wording (callers pass the text).
  */
@@ -19,6 +20,7 @@ import { Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import type { CheckResult, ScoreLabelValue } from "@/config/items";
 import type { MatchEntry } from "@/config/matches";
+import type { CompatLabel } from "@/config/taste";
 import { InfoSheet } from "@/components/guide/InfoSheet";
 
 type Theme = ReturnType<typeof useAuthTheme>;
@@ -270,6 +272,64 @@ export function TagChip({ name }: { name: string }) {
     <View style={[styles.tagChip, { backgroundColor: theme.aiLight }]}>
       <Text style={[styles.tagChipText, { color: theme.ai }]}>{name}</Text>
     </View>
+  );
+}
+
+// ─── CompatibilityPill ────────────────────────────────────────────────────────
+
+const COMPAT_TEXT: Record<CompatLabel, string> = {
+  high: "High taste in common",
+  medium: "Good taste in common",
+  low: "Some taste in common",
+};
+
+/** Taste compatibility between two people; words only, never a score. */
+export function CompatibilityPill({ label }: { label: CompatLabel }) {
+  const theme = useAuthTheme();
+  const c =
+    label === "high"
+      ? { fg: theme.success, bg: theme.successLight }
+      : label === "medium"
+        ? { fg: theme.info, bg: theme.infoLight }
+        : { fg: theme.textSecondary, bg: theme.surfaceVariant };
+  return (
+    <View style={[styles.pill, { backgroundColor: c.bg }]}>
+      <Text style={[styles.pillText, { color: c.fg }]}>{COMPAT_TEXT[label]}</Text>
+    </View>
+  );
+}
+
+// ─── TasteLensCard ────────────────────────────────────────────────────────────
+
+/** The "People like you" lens on Home, after the listing lenses. */
+export function TasteLensCard({ selected, onPress }: { selected: boolean; onPress: () => void }) {
+  const theme = useAuthTheme();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel="People like you"
+      style={[
+        styles.lens,
+        {
+          backgroundColor: theme.surface,
+          borderColor: selected ? theme.btnPrimary : theme.cardBorder,
+          borderWidth: selected ? 2 : Layout.borderWidth,
+        },
+      ]}
+    >
+      <View style={[styles.lensImage, styles.center, { backgroundColor: theme.aiLight }]}>
+        <Ionicons name="people" size={26} color={theme.ai} />
+      </View>
+      <Text numberOfLines={1} style={[styles.lensTitle, { color: theme.textPrimary }]}>
+        People like you
+      </Text>
+      <View style={[styles.countPill, { backgroundColor: theme.aiLight }]}>
+        <Text style={[styles.countPillText, { color: theme.ai }]}>Taste</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 

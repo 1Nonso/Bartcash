@@ -87,7 +87,8 @@ export interface MatchContext {
     label: string;
     result: CheckResult;
   }[];
-  shared_interests: unknown[];
+  /** Interests both owners have on their taste profiles (at most 6). */
+  shared_interests: { qloo_entity_id: string; name: string; entity_type: string; image_url: string | null }[];
   shared_tags: { tag_id: string; name: string }[];
   source: "qloo" | "fallback";
 }

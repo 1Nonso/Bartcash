@@ -65,6 +65,10 @@ export const TOPICS: Record<TopicId, Topic> = {
         heading: "Your taste",
         text: "Add brands, music and films you love. Scout uses Qloo's taste data to favour listings from brands that people with your taste enjoy.",
       },
+      {
+        heading: "People like you",
+        text: "With 3 or more interests, Scout finds people who like the same things and shows what you have in common. Only shared interests are shown, never anyone's full profile.",
+      },
     ],
     footer:
       "Scout only suggests. You decide what to offer and you send it yourself. Labels show how close a match is: Strong, Good or Possible.",

@@ -1,4 +1,5 @@
 import api from "./api";
+import type { ItemOwner, MarketplaceItem } from "./items";
 
 // ─── Types (Phase 4b, Section 16.4) ───────────────────────────────────────────
 
@@ -125,3 +126,49 @@ export const tasteDraft = {
     draft = list;
   },
 };
+
+// ─── Taste compatibility (Phase 4b, Section 16.4) ─────────────────────────────
+
+export type CompatLabel = "high" | "medium" | "low";
+
+/** Only what two people share; never the other person's full profile. */
+export interface Compatibility {
+  score_label: CompatLabel | null;
+  shared_entities: TasteEntity[];
+  shared_count: number;
+  shared_tags?: TasteTag[];
+}
+
+export interface CompatibleUser {
+  user: ItemOwner;
+  compatibility: Compatibility;
+  listings_preview: MarketplaceItem[];
+}
+
+export interface CompatibleUsersData {
+  items: CompatibleUser[];
+  next_cursor: string | null;
+  meta: { status: "ready" | "refreshing" | "empty" };
+}
+
+/**
+ * GET /taste/compatible-users — 422 TASTE_PROFILE_INACTIVE when the caller
+ * has fewer than 3 interests. Poll while meta.status is refreshing.
+ */
+export async function getCompatibleUsers(
+  params: { cursor?: string; limit?: number } = {},
+): Promise<CompatibleUsersData> {
+  const response = await api.get("/taste/compatible-users", { params });
+  return response.data.data;
+}
+
+export interface TasteCompatibilityData {
+  compatibility: Compatibility | null;
+  reason: "profile_inactive_self" | "profile_inactive_other" | null;
+}
+
+/** GET /users/{id}/taste-compatibility — View User Profile strip. */
+export async function getTasteCompatibility(userId: string): Promise<TasteCompatibilityData> {
+  const response = await api.get(`/users/${userId}/taste-compatibility`);
+  return response.data.data;
+}

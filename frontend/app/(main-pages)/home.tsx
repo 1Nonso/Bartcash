@@ -7,8 +7,10 @@
  *   GET /items/mine?status=available&include=match_summary
  *   GET /items/{id}/matches?limit=5   (poll 3 s up to 30 s while refreshing)
  *   GET /notifications (unread count)
+ *   GET /taste/compatible-users (Taste lens, components/TastePeople)
  *
- * The Taste lens ("People like you") comes with the taste profile step.
+ * The Taste lens ("People like you") sits after the listing lenses once the
+ * user has a listing or an active taste profile.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,7 +50,9 @@ import {
   LensCard,
   MatchCard,
   ScoutBadge,
+  TasteLensCard,
 } from "@/components/scout";
+import { TastePeople } from "@/components/TastePeople";
 
 /** Matches shown on Home; the rest are on the All matches screen. */
 const HOME_LIMIT = 5;
@@ -57,6 +61,8 @@ const POLL_TIMEOUT_MS = 30000;
 
 // Last lens used this session (not stored, per §13.4).
 let lastLensId: string | null = null;
+/** Selection id of the Taste lens ("People like you"). */
+const TASTE_LENS = "__taste__";
 
 function hasWants(item: MyItem | null): boolean {
   return (item?.wants?.length ?? 0) > 0;
@@ -99,6 +105,8 @@ function HomeScreen() {
   const [matchError, setMatchError] = useState<string | null>(null);
 
   const requestId = useRef(0);
+  // Bumped on focus and pull-to-refresh so the Taste lens reloads.
+  const [tasteReload, setTasteReload] = useState(0);
 
   // First open: welcome card, then the Home tour (components/guide).
   const welcome = useWelcome();
@@ -214,6 +222,13 @@ function HomeScreen() {
       const items = await getMyListingsWithMatches();
       setLenses(items);
       setLensError(false);
+      // The Taste lens stays selected; with no listings it is the only lens.
+      if (selectedId === TASTE_LENS || items.length === 0) {
+        lastLensId = TASTE_LENS;
+        setSelectedId(TASTE_LENS);
+        showLens(null);
+        return;
+      }
       const keep =
         items.find((i) => i.id === selectedId) ??
         items.find((i) => i.id === lastLensId) ??
@@ -245,9 +260,17 @@ function HomeScreen() {
         .then((p) => setTasteCount(p.entity_count))
         .catch(() => {});
       loadLensesRef.current();
+      setTasteReload((n) => n + 1);
       return () => stopPolling();
     }, [stopPolling]),
   );
+
+  const selectTaste = useCallback(() => {
+    if (selectedId === TASTE_LENS) return;
+    lastLensId = TASTE_LENS;
+    setSelectedId(TASTE_LENS);
+    showLens(null);
+  }, [selectedId, showLens]);
 
   const selectLens = useCallback(
     (item: MyItem) => {
@@ -264,6 +287,7 @@ function HomeScreen() {
 
   const handlePullRefresh = useCallback(async () => {
     setPullRefreshing(true);
+    setTasteReload((n) => n + 1);
     await loadLenses();
     setPullRefreshing(false);
   }, [loadLenses]);
@@ -296,6 +320,10 @@ function HomeScreen() {
   const refreshing = polling || meta?.status === "refreshing";
   const isFallback = meta?.source === "fallback";
   const noListings = lenses !== null && lenses.length === 0;
+  const tasteActive = tasteCount !== null && tasteCount >= 3;
+  // Shown once the user has a listing or an active profile (§13.4).
+  const showTasteLens = lenses !== null && (lenses.length > 0 || tasteActive);
+  const tasteSelected = showTasteLens && selectedId === TASTE_LENS;
   // Waits for the welcome card and for listings; with none it waits for
   // the user's first listing.
   const scrollRef = useRef<any>(null);
@@ -344,7 +372,7 @@ function HomeScreen() {
           <View key={i} style={[styles.lensSkeleton, { backgroundColor: theme.surfaceVariant }]} />
         ))}
       </ScrollView>
-    ) : noListings ? null : (
+    ) : !showTasteLens ? null : (
       <View ref={lensesRef} collapsable={false}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.lensRow}>
         {lenses.map((l) => (
@@ -359,6 +387,7 @@ function HomeScreen() {
             refreshing={l.match_summary?.status === "refreshing"}
           />
         ))}
+        <TasteLensCard selected={tasteSelected} onPress={selectTaste} />
         <AddListingLensCard onPress={createListing} />
       </ScrollView>
       </View>
@@ -384,7 +413,7 @@ function HomeScreen() {
 
   // "Tell Scout what you like" until the profile is active (3 interests).
   const tasteCard =
-    tasteCount !== null && tasteCount < 3 && !noListings ? (
+    tasteCount !== null && tasteCount < 3 && !noListings && !tasteSelected ? (
       <TouchableOpacity
         onPress={openTaste}
         activeOpacity={0.85}
@@ -512,8 +541,13 @@ function HomeScreen() {
   })();
 
   const total = selected?.match_summary?.count ?? null;
-  const footer =
-    matches.length === 0 ? null : (
+  const footer = tasteSelected ? (
+    <View style={styles.footer}>
+      <TouchableOpacity onPress={browseAll} style={styles.linkBtn}>
+        <Text style={[styles.linkText, { color: theme.link }]}>Browse all listings</Text>
+      </TouchableOpacity>
+    </View>
+  ) : matches.length === 0 ? null : (
       <View style={styles.footer}>
         {!!nextCursor && selected && (
           <TouchableOpacity
@@ -542,7 +576,7 @@ function HomeScreen() {
         ref={scrollRef}
         onScroll={tour.onScroll}
         scrollEventThrottle={16}
-        data={matches}
+        data={tasteSelected ? [] : matches}
         keyExtractor={(m) => m.item.id}
         renderItem={({ item, index }) => (
           <View
@@ -554,7 +588,7 @@ function HomeScreen() {
           </View>
         )}
         ListHeaderComponent={listHeader}
-        ListEmptyComponent={emptyState}
+        ListEmptyComponent={tasteSelected ? <TastePeople reloadKey={tasteReload} /> : emptyState}
         ListFooterComponent={footer}
         contentContainerStyle={{ paddingBottom: tabSpace }}
         refreshControl={

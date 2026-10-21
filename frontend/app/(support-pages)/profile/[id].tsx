@@ -9,6 +9,7 @@
  *   GET /users/{id}/ratings
  *   GET /items?user_id={id}&status=available  (marketplace filter)
  *   GET /user/profile                          (to get own ID for redirect check)
+ *   GET /users/{id}/taste-compatibility        (flag on; components/CommonTaste)
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -42,6 +43,7 @@ import api from "@/config/api";
 import { getUserRatings, Rating } from "@/config/ratings";
 import { MarketplaceItem } from "@/config/items";
 import { timeAgo, formatValuation } from "@/constants/listing";
+import { CommonTaste } from "@/components/CommonTaste";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -577,6 +579,8 @@ export default function ViewUserProfileScreen() {
                 </Text>
               </View>
             </View>
+
+            {id && <CommonTaste userId={id} />}
           </View>
 
           {/* ── Active Listings ── */}

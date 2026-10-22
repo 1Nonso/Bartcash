@@ -134,7 +134,7 @@ export default function EditProfileScreen() {
   const handlePickAvatar = useCallback(async () => {
     const fromGallery = async () => {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
@@ -151,7 +151,7 @@ export default function EditProfileScreen() {
         text: "Take Photo",
         onPress: async () => {
           const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.85,

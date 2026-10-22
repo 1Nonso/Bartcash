@@ -72,10 +72,24 @@ export async function updateProfile(
    req: Request,
    res: Response,
 ) {
+   // Body is validated by updateProfileSchema (snake_case); map it to the
+   // Prisma fields explicitly, never pass req.body through.
+   const body = req.body as {
+      first_name?: string;
+      last_name?: string;
+      bio?: string | null;
+      location?: string | null;
+   };
+   const data = {
+      ...(body.first_name !== undefined ? { firstName: body.first_name.trim() } : {}),
+      ...(body.last_name !== undefined ? { lastName: body.last_name.trim() } : {}),
+      ...(body.bio !== undefined ? { bio: body.bio } : {}),
+      ...(body.location !== undefined ? { location: body.location } : {}),
+   };
    const updated = await db.user.update(
       {
          where: { id: req.userId! },
-         data: req.body,
+         data,
          select: {
             id: true,
             firstName: true,

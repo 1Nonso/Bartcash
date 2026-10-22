@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import { runUploadMiddleware } from '../middlewares/upload.middleware';
 import * as itemController from '../controllers/item.controllers';
+import * as itemImagesController from '../controllers/itemImages.controllers';
 import multer from 'multer';
 import { limiter, userLimiter } from '../libs/rateLimiter';
 import { requireQloo } from '../middlewares/requireQloo.middleware';
@@ -38,6 +39,8 @@ router.post(
    runUploadMiddleware,
    itemController.uploadImages,
 );
+router.delete('/:id/images/:imageId', requireAuth, userLimiter(60), itemImagesController.destroy);
+router.patch('/:id/images/:imageId/primary', requireAuth, userLimiter(60), itemImagesController.makePrimary);
 router.get(
    '/',
    requireAuth,

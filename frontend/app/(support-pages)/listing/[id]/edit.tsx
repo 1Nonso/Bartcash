@@ -32,6 +32,7 @@ import {
 import { apiErrorMessage, setWants } from "@/config/wants";
 import { useFeatures } from "@/hooks/useFeatures";
 import WantPicker from "@/components/WantPicker";
+import { ListingPhotos } from "@/components/ListingPhotos";
 
 type Condition = "new" | "good" | "fair" | "poor";
 
@@ -431,6 +432,14 @@ export default function EditListingScreen() {
             </Text>
           </View>
         )}
+
+        {/* ── Photos (saved at once; components/ListingPhotos) ── */}
+        <ListingPhotos
+          itemId={item.id}
+          images={item.images}
+          editable={item.status === "draft" || item.status === "available"}
+          onChange={(images) => setItem((prev) => (prev ? { ...prev, images } : prev))}
+        />
 
         {/* ── Basic Information ── */}
         <View

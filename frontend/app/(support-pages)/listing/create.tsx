@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -13,8 +12,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useAnimatedValue,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { useFeatures } from "@/hooks/useFeatures";

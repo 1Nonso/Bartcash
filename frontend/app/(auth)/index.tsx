@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { View, Text, StyleSheet, Animated, Easing, useAnimatedValue } from "react-native";
+import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { Image } from "expo-image";
 import * as SplashScreen from "expo-splash-screen";

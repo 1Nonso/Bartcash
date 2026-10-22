@@ -10,8 +10,8 @@ import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
-  useAnimatedValue,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

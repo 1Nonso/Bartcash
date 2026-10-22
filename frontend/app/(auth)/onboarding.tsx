@@ -9,8 +9,8 @@ import {
   FlatList,
   Image,
   Platform,
-  useAnimatedValue,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
 import { router, useFocusEffect } from "expo-router";
 import { useAuthTheme } from "@/constants/useAuthTheme";

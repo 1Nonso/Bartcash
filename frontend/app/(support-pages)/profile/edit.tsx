@@ -13,7 +13,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -25,8 +24,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useAnimatedValue,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { appendImage } from "@/config/upload";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import {  } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -131,6 +132,20 @@ export default function EditProfileScreen() {
   // ── Avatar picker ────────────────────────────────────────────────────────────
 
   const handlePickAvatar = useCallback(async () => {
+    const fromGallery = async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setAvatarUri(result.assets[0].uri);
+        setAvatarChanged(true);
+      }
+    };
+    // Web: no camera choice; open the file picker straight away.
+    if (Platform.OS === "web") return fromGallery();
     Alert.alert("Change Photo", "Choose an option", [
       {
         text: "Take Photo",
@@ -147,21 +162,7 @@ export default function EditProfileScreen() {
           }
         },
       },
-      {
-        text: "Choose from Gallery",
-        onPress: async () => {
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.85,
-          });
-          if (!result.canceled && result.assets[0]) {
-            setAvatarUri(result.assets[0].uri);
-            setAvatarChanged(true);
-          }
-        },
-      },
+      { text: "Choose from Gallery", onPress: fromGallery },
       { text: "Cancel", style: "cancel" },
     ]);
   }, []);
@@ -198,11 +199,11 @@ export default function EditProfileScreen() {
       if (avatarChanged && avatarUri) {
         setUploadingAvatar(true);
         const formData = new FormData();
-        formData.append("avatar", {
+        await appendImage(formData, "avatar", {
           uri: avatarUri,
           name: "avatar.jpg",
           type: "image/jpeg",
-        } as any);
+        });
         await api.post("/user/avatar", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });

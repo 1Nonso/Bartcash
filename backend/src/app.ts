@@ -32,9 +32,15 @@ const limiter = rateLimit({
 
 app.use(morgan('combined'));
 app.use(express.json());
+// CLIENT_URL: comma-separated web origins allowed to call the API (the web
+// build). Requests with no Origin (the mobile app, curl) are not affected.
+const allowedOrigins = (process.env.CLIENT_URL ?? '')
+   .split(',')
+   .map((o) => o.trim().replace(/\/+$/, ''))
+   .filter(Boolean);
 app.use(
    cors({
-      origin: process.env.CLIENT_URL,
+      origin: allowedOrigins.length > 0 ? allowedOrigins : false,
       credentials: true,
    }),
 );

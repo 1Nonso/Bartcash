@@ -10,8 +10,8 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useAnimatedValue,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

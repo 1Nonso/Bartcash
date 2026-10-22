@@ -1,4 +1,5 @@
 import api from "./api";
+import { appendImage } from "./upload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,13 +239,7 @@ export async function createItem(
   Object.entries(payload).forEach(([k, v]) => {
     if (v !== undefined) form.append(k, String(v));
   });
-  images.forEach((img) =>
-    form.append("images", {
-      uri: img.uri,
-      name: img.name,
-      type: img.type,
-    } as any),
-  );
+  for (const img of images) await appendImage(form, "images", img);
   const res = await api.post("/items", form, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 60000,
@@ -274,13 +269,7 @@ export async function uploadItemImages(
   images: { uri: string; name: string; type: string }[],
 ): Promise<{ images: ItemImage[]; valuation_status: string }> {
   const formData = new FormData();
-  images.forEach((img) => {
-    formData.append("images", {
-      uri: img.uri,
-      name: img.name,
-      type: img.type,
-    } as any);
-  });
+  for (const img of images) await appendImage(formData, "images", img);
   const response = await api.post(`/items/${itemId}/images`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 30000,

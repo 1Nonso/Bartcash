@@ -17,8 +17,8 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useAnimatedValue,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
 import { useWelcome } from "@/components/guide/Welcome";

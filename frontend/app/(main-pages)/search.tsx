@@ -26,8 +26,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useAnimatedValue,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useFocusEffect } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";

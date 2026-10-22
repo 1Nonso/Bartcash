@@ -277,6 +277,31 @@ export async function uploadItemImages(
   return response.data.data;
 }
 
+/** Result of a photo change on Edit Listing. */
+export interface ImagesChange {
+  images: ItemImage[];
+  /** "pending" when the valuation was re-run (the cover changed). */
+  valuation_status: string | null;
+}
+
+/**
+ * Remove a photo (never the last one; the next becomes the cover if needed).
+ * DELETE /items/{id}/images/{imageId}
+ */
+export async function removeItemImage(itemId: string, imageId: string): Promise<ImagesChange> {
+  const response = await api.delete(`/items/${itemId}/images/${imageId}`);
+  return response.data.data;
+}
+
+/**
+ * Make a photo the cover; the valuation re-runs.
+ * PATCH /items/{id}/images/{imageId}/primary
+ */
+export async function setItemCover(itemId: string, imageId: string): Promise<ImagesChange> {
+  const response = await api.patch(`/items/${itemId}/images/${imageId}/primary`);
+  return response.data.data;
+}
+
 /**
  * Update an existing item listing.
  * PUT /items/{id}

@@ -299,40 +299,6 @@ export function CompatibilityPill({ label }: { label: CompatLabel }) {
   );
 }
 
-// ─── TasteLensCard ────────────────────────────────────────────────────────────
-
-/** The "People like you" lens on Home, after the listing lenses. */
-export function TasteLensCard({ selected, onPress }: { selected: boolean; onPress: () => void }) {
-  const theme = useAuthTheme();
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel="People like you"
-      style={[
-        styles.lens,
-        {
-          backgroundColor: theme.surface,
-          borderColor: selected ? theme.btnPrimary : theme.cardBorder,
-          borderWidth: selected ? 2 : Layout.borderWidth,
-        },
-      ]}
-    >
-      <View style={[styles.lensImage, styles.center, { backgroundColor: theme.aiLight }]}>
-        <Ionicons name="people" size={26} color={theme.ai} />
-      </View>
-      <Text numberOfLines={1} style={[styles.lensTitle, { color: theme.textPrimary }]}>
-        People like you
-      </Text>
-      <View style={[styles.countPill, { backgroundColor: theme.aiLight }]}>
-        <Text style={[styles.countPillText, { color: theme.ai }]}>Taste</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({

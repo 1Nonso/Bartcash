@@ -19,7 +19,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
-import { Redirect, router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
 import { useWelcome } from "@/components/guide/Welcome";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +34,7 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { SafeRedirect } from "@/components/SafeRedirect";
 import {
   Category,
   MarketplaceItem,
@@ -218,7 +219,7 @@ export default function DashboardScreen() {
   const { qloo, loading } = useFeatures();
   // Flag on: Home replaces this screen; sign-in and other links still land here.
   if (loading) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
-  if (qloo) return <Redirect href="/(main-pages)/home" />;
+  if (qloo) return <SafeRedirect href="/(main-pages)/home" />;
   return <BrowseScreen />;
 }
 

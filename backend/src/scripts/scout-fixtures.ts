@@ -65,6 +65,10 @@ test('Template message (spec text, top-up sentence when > 0, capped)', () => {
    );
    assert.ok(templateMessage('Ada', 'PS5', 'Galaxy A52', 45).endsWith(' I can add $45 to balance the values.'));
    assert.ok(templateMessage('Ada', 'x'.repeat(400), 'y'.repeat(400), 0).length <= MESSAGE_MAX);
+   assert.equal(
+      templateMessage('Ada', 'PS5', 'Galaxy A52', 45, 'Adidas'),
+      'Hi Ada, I would like to swap my PS5 for your Galaxy A52. We both like Adidas, so I thought you might like this swap. Would you be open to it? I can add $45 to balance the values.',
+   );
 });
 
 test('validateMessage: 20-500 chars, no links, whitespace tidied', () => {

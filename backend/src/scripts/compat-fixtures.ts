@@ -13,6 +13,8 @@ import {
    formatCompatibility,
    ownerScore,
    pairIds,
+   rankPreviews,
+   readRelated,
    readShared,
    readTags,
    type ProfileEntity,
@@ -161,6 +163,29 @@ test('Draft prompt mentions a shared interest only when given', () => {
    const base = { name: 'Ada', offered: 'PS5', target: 'Galaxy A52', topUp: 0, theyWant: null };
    assert.ok(messagePrompt({ ...base, shared: 'Nike' }).includes('Both people list "Nike"'));
    assert.ok(!messagePrompt(base).includes('Both people'));
+});
+
+test('Previews: own brand, then related, then tags, then newest', () => {
+   const d = (n: number) => new Date(Date.UTC(2026, 9, n));
+   const viewer = { entityIds: new Set(['nike', 'sony']), tagIds: new Set(['t1', 't2']) };
+   const base = { tags: [], related: [], entityId: null };
+   const items = [
+      { ...base, id: 'newest', createdAt: d(20) },
+      { ...base, id: 'tags2', createdAt: d(1), tags: [{ tag_id: 't1', name: 'a' }, { tag_id: 't2', name: 'b' }] },
+      { ...base, id: 'tags1', createdAt: d(2), tags: [{ tag_id: 't1', name: 'a' }] },
+      { ...base, id: 'relWeak', createdAt: d(3), entityId: 'puma', related: [{ entity_id: 'nike', affinity: 0.4 }] },
+      { ...base, id: 'relStrong', createdAt: d(4), entityId: 'reebok', related: [{ entity_id: 'sony', affinity: 0.9 }] },
+      { ...base, id: 'own', createdAt: d(5), entityId: 'nike' },
+      { ...base, id: 'older', createdAt: d(10) },
+   ];
+   assert.deepEqual(
+      rankPreviews(items, viewer).map((i) => i.id),
+      ['own', 'relStrong', 'relWeak', 'tags2', 'tags1', 'newest', 'older'],
+   );
+   assert.deepEqual(readRelated([{ entity_id: 'x', affinity: 0.5 }, { entity_id: 'y' }, 3]), [
+      { entity_id: 'x', affinity: 0.5 },
+      { entity_id: 'y', affinity: null },
+   ]);
 });
 
 let failed = 0;

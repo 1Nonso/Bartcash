@@ -14,7 +14,8 @@ import type { SharedEntity } from './tasteCompat';
 export const MESSAGE_MAX = 500;
 export const MESSAGE_MIN = 20;
 export const RATIONALE_MAX = 140;
-export const GROQ_LIMIT_MS = 5000;
+/** Server wait for Groq; the app waits 8 s for the whole request. */
+export const GROQ_LIMIT_MS = 7000;
 const MESSAGE_MAX_TOKENS = 200;
 /** Yours worth this much more than theirs (ratio) before suggesting they top up. */
 const ASK_TOP_UP_RATIO = 1.1;
@@ -64,8 +65,16 @@ export function computeTopUp(
    return { topUp: 0, note: 'The two items are close in value.' };
 }
 
-export function templateMessage(name: string, offered: string, target: string, topUp: number): string {
-   const base = `Hi ${name}, I would like to swap my ${offered} for your ${target}. Would you be open to it?`;
+/** Spec template; adds a shared interest (when there is one) and the top-up. */
+export function templateMessage(
+   name: string,
+   offered: string,
+   target: string,
+   topUp: number,
+   shared: string | null = null,
+): string {
+   const liked = shared ? ` We both like ${shared}, so I thought you might like this swap.` : '';
+   const base = `Hi ${name}, I would like to swap my ${offered} for your ${target}.${liked} Would you be open to it?`;
    return clip(topUp > 0 ? `${base} I can add ${usd(topUp)} to balance the values.` : base, MESSAGE_MAX);
 }
 
@@ -233,7 +242,7 @@ export async function draftOffer(
          trade_type: 'item',
          offered_item_ids: [source.id],
          top_up_amount: topUp,
-         message: message ?? templateMessage(name, source.title, target.title, topUp),
+         message: message ?? templateMessage(name, source.title, target.title, topUp, shared[0]?.name ?? null),
          drafted_by: draftedBy,
          value_note: note,
          rationale: clip(reason ?? `Your ${source.title} for their ${target.title}.`, RATIONALE_MAX),

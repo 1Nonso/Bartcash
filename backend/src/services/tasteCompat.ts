@@ -135,3 +135,62 @@ export function readShared(raw: unknown): SharedEntity[] {
            }))
       : [];
 }
+
+// ── Listing previews ─────────────────────────────────────────────────────────
+
+/** A person's listing with its stored brand data (item_tastes). */
+export interface PreviewCandidate {
+   id: string;
+   createdAt: Date;
+   entityId: string | null;
+   tags: TagRef[];
+   /** The listing brand's related brands: [{ entity_id, affinity }]. */
+   related: { entity_id: string; affinity: number | null }[];
+}
+
+/** The viewer's interests as preview ranking needs them. */
+export interface ViewerTaste {
+   entityIds: Set<string>;
+   tagIds: Set<string>;
+}
+
+/** related_entities JSON read back safely. */
+export function readRelated(raw: unknown): PreviewCandidate['related'] {
+   return Array.isArray(raw)
+      ? (raw as { entity_id?: unknown; affinity?: unknown }[])
+           .filter((r) => r && typeof r.entity_id === 'string')
+           .map((r) => ({
+              entity_id: r.entity_id as string,
+              affinity: typeof r.affinity === 'number' ? r.affinity : null,
+           }))
+      : [];
+}
+
+/**
+ * Order a person's listings by fit with the viewer's taste: (1) the brand
+ * is one of the viewer's interests, (2) one of the viewer's interests is a
+ * related brand of the listing's brand (stronger first), (3) more tags in
+ * common, (4) newest. Stored data only; no Qloo call.
+ */
+export function rankPreviews<T extends PreviewCandidate>(items: T[], viewer: ViewerTaste): T[] {
+   const key = (c: T) => {
+      const own = c.entityId !== null && viewer.entityIds.has(c.entityId) ? 1 : 0;
+      let related = -1;
+      for (const r of c.related) {
+         if (viewer.entityIds.has(r.entity_id)) related = Math.max(related, r.affinity ?? 0);
+      }
+      const tags = c.tags.filter((t) => viewer.tagIds.has(t.tag_id)).length;
+      return { own, related, tags };
+   };
+   return items
+      .map((c) => ({ c, k: key(c) }))
+      .sort(
+         (a, b) =>
+            b.k.own - a.k.own ||
+            b.k.related - a.k.related ||
+            b.k.tags - a.k.tags ||
+            b.c.createdAt.getTime() - a.c.createdAt.getTime() ||
+            (a.c.id < b.c.id ? 1 : -1),
+      )
+      .map(({ c }) => c);
+}

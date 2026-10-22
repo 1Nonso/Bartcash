@@ -16,8 +16,8 @@ export interface OfferDraft {
   shared_interests: unknown[];
 }
 
-/** Client limit (FLOW §10.9): the server's Groq call is capped at 5 s. */
-const DRAFT_TIMEOUT_MS = 8000;
+/** Client limit (FLOW §10.9): the server's Groq call is capped at 7 s. */
+const DRAFT_TIMEOUT_MS = 10000;
 
 /**
  * Ask Scout to draft a trade proposal. Nothing is created.

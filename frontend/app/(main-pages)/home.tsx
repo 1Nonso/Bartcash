@@ -7,10 +7,10 @@
  *   GET /items/mine?status=available&include=match_summary
  *   GET /items/{id}/matches?limit=5   (poll 3 s up to 30 s while refreshing)
  *   GET /notifications (unread count)
- *   GET /taste/compatible-users (Taste lens, components/TastePeople)
+ *   GET /taste/compatible-users (People like you tab, components/TastePeople)
  *
- * The Taste lens ("People like you") sits after the listing lenses once the
- * user has a listing or an active taste profile.
+ * Two tabs under the header, once the user has a listing or an active taste
+ * profile: Matches (lens slider and matches) and People like you.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,7 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Redirect, router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useFeatures } from "@/hooks/useFeatures";
 import { useTour } from "@/components/guide/Tour";
 import { useWelcome } from "@/components/guide/Welcome";
@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import { Colors, Layout, Radius, Shadows, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { SafeRedirect } from "@/components/SafeRedirect";
 import { timeAgo } from "@/constants/listing";
 import { getStoredUser } from "@/config/auth";
 import { getUnreadCount } from "@/config/notifications";
@@ -50,7 +51,6 @@ import {
   LensCard,
   MatchCard,
   ScoutBadge,
-  TasteLensCard,
 } from "@/components/scout";
 import { TastePeople } from "@/components/TastePeople";
 
@@ -61,8 +61,9 @@ const POLL_TIMEOUT_MS = 30000;
 
 // Last lens used this session (not stored, per §13.4).
 let lastLensId: string | null = null;
-/** Selection id of the Taste lens ("People like you"). */
-const TASTE_LENS = "__taste__";
+type HomeTab = "matches" | "people";
+// Last tab used this session (not stored); null until the user picks one.
+let lastTab: HomeTab | null = null;
 
 function hasWants(item: MyItem | null): boolean {
   return (item?.wants?.length ?? 0) > 0;
@@ -78,7 +79,7 @@ export default function HomeRoute() {
   const theme = useAuthTheme();
   const { qloo, loading } = useFeatures();
   if (loading) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
-  if (!qloo) return <Redirect href="/(main-pages)/dashboard" />;
+  if (!qloo) return <SafeRedirect href="/(main-pages)/dashboard" />;
   return <HomeScreen />;
 }
 
@@ -105,16 +106,22 @@ function HomeScreen() {
   const [matchError, setMatchError] = useState<string | null>(null);
 
   const requestId = useRef(0);
-  // Bumped on focus and pull-to-refresh so the Taste lens reloads.
+  const [tab, setTab] = useState<HomeTab | null>(lastTab);
+  // Bumped on focus and pull-to-refresh so People like you reloads.
   const [tasteReload, setTasteReload] = useState(0);
 
   // First open: welcome card, then the Home tour (components/guide).
   const welcome = useWelcome();
   const lensesRef = useRef<View>(null);
+  const tabsRef = useRef<View>(null);
   const firstMatchRef = useRef<View>(null);
   const badgeRef = useRef<View>(null);
   const tourSteps = useMemo(
     () => [
+      {
+        target: tabsRef,
+        text: "Switch to People like you to meet people who like what you like.",
+      },
       { target: lensesRef, text: "These are your listings. Tap one to see who matches it." },
       {
         target: firstMatchRef,
@@ -222,13 +229,6 @@ function HomeScreen() {
       const items = await getMyListingsWithMatches();
       setLenses(items);
       setLensError(false);
-      // The Taste lens stays selected; with no listings it is the only lens.
-      if (selectedId === TASTE_LENS || items.length === 0) {
-        lastLensId = TASTE_LENS;
-        setSelectedId(TASTE_LENS);
-        showLens(null);
-        return;
-      }
       const keep =
         items.find((i) => i.id === selectedId) ??
         items.find((i) => i.id === lastLensId) ??
@@ -265,12 +265,10 @@ function HomeScreen() {
     }, [stopPolling]),
   );
 
-  const selectTaste = useCallback(() => {
-    if (selectedId === TASTE_LENS) return;
-    lastLensId = TASTE_LENS;
-    setSelectedId(TASTE_LENS);
-    showLens(null);
-  }, [selectedId, showLens]);
+  const pickTab = useCallback((t: HomeTab) => {
+    lastTab = t;
+    setTab(t);
+  }, []);
 
   const selectLens = useCallback(
     (item: MyItem) => {
@@ -322,8 +320,11 @@ function HomeScreen() {
   const noListings = lenses !== null && lenses.length === 0;
   const tasteActive = tasteCount !== null && tasteCount >= 3;
   // Shown once the user has a listing or an active profile (§13.4).
-  const showTasteLens = lenses !== null && (lenses.length > 0 || tasteActive);
-  const tasteSelected = showTasteLens && selectedId === TASTE_LENS;
+  // Tabs once the user has a listing or an active profile (§13.4); with no
+  // listings and an active profile, People like you opens first.
+  const showTabs = lenses !== null && (lenses.length > 0 || tasteActive);
+  const currentTab: HomeTab = tab ?? (noListings && tasteActive ? "people" : "matches");
+  const tasteSelected = showTabs && currentTab === "people";
   // Waits for the welcome card and for listings; with none it waits for
   // the user's first listing.
   const scrollRef = useRef<any>(null);
@@ -372,7 +373,7 @@ function HomeScreen() {
           <View key={i} style={[styles.lensSkeleton, { backgroundColor: theme.surfaceVariant }]} />
         ))}
       </ScrollView>
-    ) : !showTasteLens ? null : (
+    ) : noListings || tasteSelected ? null : (
       <View ref={lensesRef} collapsable={false}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.lensRow}>
         {lenses.map((l) => (
@@ -387,13 +388,12 @@ function HomeScreen() {
             refreshing={l.match_summary?.status === "refreshing"}
           />
         ))}
-        <TasteLensCard selected={tasteSelected} onPress={selectTaste} />
         <AddListingLensCard onPress={createListing} />
       </ScrollView>
       </View>
     );
 
-  const resultsHeading = selected && hasWants(selected) ? (
+  const resultsHeading = !tasteSelected && selected && hasWants(selected) ? (
     <View style={styles.resultsHead}>
       <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.textPrimary }]}>
         Matches for {selected.title}
@@ -432,9 +432,42 @@ function HomeScreen() {
       </TouchableOpacity>
     ) : null;
 
+  const tabs = showTabs ? (
+    <View
+      ref={tabsRef}
+      collapsable={false}
+      accessibilityRole="tablist"
+      style={[styles.tabs, { backgroundColor: theme.surfaceVariant }]}
+    >
+      {(
+        [
+          ["matches", "Matches"],
+          ["people", "People like you"],
+        ] as const
+      ).map(([key, label]) => {
+        const on = currentTab === key;
+        return (
+          <TouchableOpacity
+            key={key}
+            onPress={() => pickTab(key)}
+            activeOpacity={0.85}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            style={[styles.tab, on && [styles.tabOn, { backgroundColor: theme.surface }]]}
+          >
+            <Text style={[styles.tabText, { color: on ? theme.textPrimary : theme.textSecondary }]}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  ) : null;
+
   const listHeader = (
     <View>
       {header}
+      {tabs}
       {tasteCard}
       {lensError && (
         <TouchableOpacity
@@ -692,6 +725,22 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   tasteTitle: { ...Typography.bodyMedium },
+  tabs: {
+    flexDirection: "row",
+    marginHorizontal: Layout.screenPadding,
+    marginBottom: Spacing[3],
+    padding: 3,
+    borderRadius: Radius.full,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing[2],
+    borderRadius: Radius.full,
+  },
+  tabOn: { ...Shadows.xs },
+  tabText: { ...Typography.buttonSm },
   linkText: { ...Typography.bodyMedium },
   footer: { alignItems: "center", paddingVertical: Spacing[3], gap: Spacing[2] },
 });

@@ -10,7 +10,15 @@ import { formatItemCard, formatOwner } from '../utils/itemFormat';
 import { takeReadRefreshSlot } from './matchRefresh.service';
 import { MIN_ACTIVE_ENTITIES } from './tasteSummary';
 import { readPair } from './tasteCompatJob.service';
-import { COMPAT_MIN, formatCompatibility, readShared } from './tasteCompat';
+import {
+   COMPAT_MIN,
+   formatCompatibility,
+   rankPreviews,
+   readRelated,
+   readShared,
+   readTags,
+   type ViewerTaste,
+} from './tasteCompat';
 
 export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 20;
@@ -131,11 +139,32 @@ export async function getCompatibleUsers(
 
    const page = rows.slice(0, limit);
    const others = page.map((r) => (r.userAId === callerId ? r.userB : r.userA));
-   const previews = await db.item.findMany({
-      where: { userId: { in: others.map((o) => o.id) }, status: 'available', deletedAt: null },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      include: { images: { where: { isPrimary: true }, take: 1 }, valuation: true, user: true },
-   });
+   const [previews, viewer] = await Promise.all([
+      db.item.findMany({
+         where: { userId: { in: others.map((o) => o.id) }, status: 'available', deletedAt: null },
+         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+         include: {
+            images: { where: { isPrimary: true }, take: 1 },
+            valuation: true,
+            user: true,
+            taste: { select: { status: true, qlooEntityId: true, tags: true, relatedEntities: true } },
+         },
+      }),
+      loadViewerTaste(callerId),
+   ]);
+   // Listings that fit the caller's taste first (stored data, no Qloo call).
+   const ranked = rankPreviews(
+      previews.map((p) => {
+         const resolved = p.taste?.status === 'resolved';
+         return {
+            ...p,
+            entityId: resolved ? (p.taste?.qlooEntityId ?? null) : null,
+            tags: resolved ? readTags(p.taste?.tags) : [],
+            related: resolved ? readRelated(p.taste?.relatedEntities) : [],
+         };
+      }),
+      viewer,
+   );
 
    const items = page.map((r, i) => {
       const other = others[i]!;
@@ -145,7 +174,7 @@ export async function getCompatibleUsers(
             score: Number(r.score),
             shared_entities: readShared(r.sharedEntities),
          }),
-         listings_preview: previews
+         listings_preview: ranked
             .filter((p) => p.userId === other.id)
             .slice(0, PREVIEW_ITEMS)
             .map(formatItemCard),
@@ -163,6 +192,18 @@ export async function getCompatibleUsers(
          next_cursor: rows.length > limit ? String(offset + limit) : null,
          meta: { status },
       },
+   };
+}
+
+/** The caller's interest ids and pooled tag ids. */
+async function loadViewerTaste(userId: string): Promise<ViewerTaste> {
+   const rows = await db.userTasteEntity.findMany({
+      where: { userId },
+      select: { qlooEntityId: true, tags: true },
+   });
+   return {
+      entityIds: new Set(rows.map((r) => r.qlooEntityId)),
+      tagIds: new Set(rows.flatMap((r) => readTags(r.tags).map((t) => t.tag_id))),
    };
 }
 

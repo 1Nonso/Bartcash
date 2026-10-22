@@ -110,12 +110,25 @@ function HomeScreen() {
   // Bumped on focus and pull-to-refresh so People like you reloads.
   const [tasteReload, setTasteReload] = useState(0);
 
-  // First open: welcome card, then the Home tour (components/guide).
+  // First open: welcome card, then one tour per tab (components/guide).
   const welcome = useWelcome();
   const lensesRef = useRef<View>(null);
   const tabsRef = useRef<View>(null);
   const firstMatchRef = useRef<View>(null);
+  const firstPersonRef = useRef<View>(null);
   const badgeRef = useRef<View>(null);
+  const [peopleLoaded, setPeopleLoaded] = useState(false);
+  const peopleTourSteps = useMemo(
+    () => [
+      {
+        target: tabsRef,
+        text: "Switch between your matches and people who like what you like.",
+      },
+      { target: firstPersonRef, text: "People with your taste, and their listings that fit you." },
+      { target: badgeRef, text: "Tap Scout anytime to see how matching works." },
+    ],
+    [],
+  );
   const tourSteps = useMemo(
     () => [
       {
@@ -325,14 +338,25 @@ function HomeScreen() {
   const showTabs = lenses !== null && (lenses.length > 0 || tasteActive);
   const currentTab: HomeTab = tab ?? (noListings && tasteActive ? "people" : "matches");
   const tasteSelected = showTabs && currentTab === "people";
-  // Waits for the welcome card and for listings; with none it waits for
-  // the user's first listing.
+  // One tour per tab, each with its own seen flag, so a tour is never used
+  // up on the other tab. Matches waits for listings (with none, for the
+  // first listing); People waits for its first load.
   const scrollRef = useRef<any>(null);
   const tour = useTour(
     "home",
     tourSteps,
-    welcome.seen && !!lenses && lenses.length > 0 && !loadingMatches,
+    welcome.seen && !tasteSelected && !!lenses && lenses.length > 0 && !loadingMatches,
     { scrollRef },
+  );
+  const peopleTour = useTour("home_people", peopleTourSteps, welcome.seen && tasteSelected && peopleLoaded, {
+    scrollRef,
+  });
+  const onListScroll = useCallback(
+    (e: Parameters<typeof tour.onScroll>[0]) => {
+      tour.onScroll(e);
+      peopleTour.onScroll(e);
+    },
+    [tour, peopleTour],
   );
 
   // ── Render pieces ──────────────────────────────────────────────────────────
@@ -607,7 +631,7 @@ function HomeScreen() {
       />
       <FlatList
         ref={scrollRef}
-        onScroll={tour.onScroll}
+        onScroll={onListScroll}
         scrollEventThrottle={16}
         data={tasteSelected ? [] : matches}
         keyExtractor={(m) => m.item.id}
@@ -621,7 +645,13 @@ function HomeScreen() {
           </View>
         )}
         ListHeaderComponent={listHeader}
-        ListEmptyComponent={tasteSelected ? <TastePeople reloadKey={tasteReload} /> : emptyState}
+        ListEmptyComponent={
+          tasteSelected ? (
+            <TastePeople reloadKey={tasteReload} firstCardRef={firstPersonRef} onLoaded={setPeopleLoaded} />
+          ) : (
+            emptyState
+          )
+        }
         ListFooterComponent={footer}
         contentContainerStyle={{ paddingBottom: tabSpace }}
         refreshControl={
@@ -631,6 +661,7 @@ function HomeScreen() {
       />
       {welcome.node}
       {tour.node}
+      {peopleTour.node}
     </View>
   );
 }

@@ -5,7 +5,8 @@
  *
  * API: GET /taste/compatible-users (10 per page; poll 3 s up to 30 s while
  * refreshing). 422 TASTE_PROFILE_INACTIVE shows the setup card.
- * `reloadKey` changes on focus and pull-to-refresh.
+ * `reloadKey` changes on focus and pull-to-refresh. `firstCardRef` and
+ * `onLoaded` feed Home's People like you tour.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -24,7 +25,16 @@ const CHIPS_SHOWN = 3;
 
 type Status = "loading" | "inactive" | "ready" | "refreshing" | "empty" | "error";
 
-export function TastePeople({ reloadKey }: { reloadKey: number }) {
+export function TastePeople({
+  reloadKey,
+  firstCardRef,
+  onLoaded,
+}: {
+  reloadKey: number;
+  firstCardRef?: React.RefObject<View | null>;
+  /** True once the first load has finished (whatever its outcome). */
+  onLoaded?: (loaded: boolean) => void;
+}) {
   const theme = useAuthTheme();
   const [people, setPeople] = useState<CompatibleUser[]>([]);
   const [status, setStatus] = useState<Status>("loading");
@@ -90,6 +100,10 @@ export function TastePeople({ reloadKey }: { reloadKey: number }) {
     loadRef.current();
   }, [reloadKey]);
   useEffect(() => stopPolling, [stopPolling]);
+
+  useEffect(() => {
+    onLoaded?.(status !== "loading");
+  }, [status, onLoaded]);
 
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
@@ -174,8 +188,10 @@ export function TastePeople({ reloadKey }: { reloadKey: number }) {
         </View>
       ) : (
         <View style={styles.list}>
-          {people.map((p) => (
-            <PersonCard key={p.user.id} person={p} />
+          {people.map((p, i) => (
+            <View key={p.user.id} ref={i === 0 ? firstCardRef : undefined} collapsable={false}>
+              <PersonCard person={p} />
+            </View>
           ))}
           {!!nextCursor && (
             <TouchableOpacity

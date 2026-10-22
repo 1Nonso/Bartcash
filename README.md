@@ -82,15 +82,13 @@ npx expo start                # scan the QR code with Expo Go, or press a for an
 
 ### Tests
 
-The scoring and Qloo logic is covered by fixture scripts that need no database or network (they use recorded Qloo responses):
+The scoring, matching, taste and Scout logic is covered by fixture scripts that need no API keys or network calls:
 
 ```bash
 cd backend
-npx tsx src/scripts/match-fixtures.ts
-npx tsx src/scripts/item-taste-fixtures.ts
-npx tsx src/scripts/compat-fixtures.ts
-npx tsx src/scripts/scout-fixtures.ts
-npx tsx src/scripts/taste-fixtures.ts
+for f in match compat scout taste wants want-suggestions backfill groq-limiter valuation-failure; do
+  npx tsx src/scripts/$f-fixtures.ts
+done
 ```
 
 ## License

@@ -3,6 +3,7 @@ import type {
    Response,
    NextFunction,
 } from 'express';
+import { maskIds } from '../utils/logSafe';
 
 /** A malformed uuid in a path or query reaches Postgres as 22P02 (Prisma P2007). */
 function isInvalidUuid(err: any): boolean {
@@ -13,11 +14,9 @@ function isInvalidUuid(err: any): boolean {
    );
 }
 
-const UUID_IN_PATH = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-
 /** Full path without the query string, ids masked (never log user ids). */
 function routeOf(req: Request): string {
-   return (req.originalUrl ?? '').split('?')[0]!.replace(UUID_IN_PATH, ':id');
+   return maskIds((req.originalUrl ?? '').split('?')[0]!);
 }
 
 export function errorHandler(

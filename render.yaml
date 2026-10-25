@@ -30,7 +30,9 @@ services:
         sync: false
       - key: JWT_SECRET            # NEW random value, not your local one
         sync: false
-      - key: CLIENT_URL
+      - key: CLIENT_URL            # web origins for CORS; leave empty (no web build)
+        sync: false
+      - key: API_BASE_URL          # https://<service>.onrender.com/api (password-reset links)
         sync: false
       # Cloudflare R2 (S3-compatible, Laravel-style names)
       - key: AWS_ACCESS_KEY_ID
@@ -54,6 +56,8 @@ services:
         sync: false
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
+      - key: GROQ_RPM              # one process holds the whole key: 25 of Groq's 30/min
+        value: "25"
       # Email (SendLibs)
       - key: SENDLIBS_API_KEY
         sync: false
@@ -61,3 +65,19 @@ services:
         value: Bartcash
       - key: MAIL_FROM_ADDRESS
         sync: false
+      # Qloo taste intelligence. Set QLOO_ENABLED in the dashboard (false for
+      # the first deploy, then true) so a Blueprint sync never flips it.
+      - key: QLOO_ENABLED
+        sync: false
+      - key: QLOO_API_KEY
+        sync: false
+      - key: QLOO_BASE_URL
+        value: https://hackathon.api.qloo.com
+      - key: QLOO_RPS              # one process: stay under Qloo's shared 4/s
+        value: "3"
+      - key: QLOO_TIMEOUT_MS       # uncached searches took up to 6.4 s (Oct 22)
+        value: "8000"
+      - key: QLOO_BUDGET_SOFT_STOP # remaining monthly calls: background work stops
+        value: "1000"
+      - key: QLOO_BUDGET_HARD_STOP # remaining monthly calls: all Qloo calls stop
+        value: "200"

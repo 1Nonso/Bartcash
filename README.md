@@ -16,13 +16,13 @@ Barter has a discovery problem: you need someone who has what you want **and** w
 |---|---|---|
 | **What would you take?** | When you list an item, Bartcash suggests five categories to ask for in exchange, with a reason ("Fans of Canon also like Sony") | The listing's brand is recognised and looked up in Qloo; its related brands (insights) are mapped onto Bartcash's categories and ranked |
 | **Scout: matches for each listing** | Home shows the best listings to swap with, labelled Strong / Good / Possible, with "Why this matches" | Ranking combines your wants, the other person's wants, and **taste affinity**: one Qloo insights call scores candidate brands against your listing's brand and your interests |
-| **Taste profile** | Add brands, artists, films, TV, games, books and podcasts you like, with suggestions before you type | Qloo search across entity types; suggestions from related brands, "picked for your taste" insights and popular picks in Lagos |
+| **Taste profile** | Add brands, artists, films, TV, games, books and podcasts you like, with suggestions before you type | Qloo search across entity types; suggestions from related brands, "picked for your taste" insights and popular picks |
 | **People like you** | People whose taste overlaps with yours, what you have in common, and their listings that fit you | Overlap of saved Qloo entities and their tags; previews ranked by Qloo brand relations |
 | **Draft an offer with Scout** | One tap drafts a trade proposal: the item to offer, a fair cash top-up and a friendly opening message | Mentions an interest you both share; the top-up comes from the two automated valuations |
 
 Scout only suggests: you review and send every offer yourself.
 
-**Built to run on a budget.** Qloo responses are cached, calls are paced per process, background work stops when the monthly budget runs low, and every Qloo feature sits behind one flag (`QLOO_ENABLED`). With the flag off, Bartcash falls back to category-based matching and behaves as it did before Qloo.
+**Built to run on a budget.** Qloo responses are cached, calls are paced per process, background work stops when the monthly budget runs low, and every Qloo feature sits behind one flag (`QLOO_ENABLED`). With the flag off, the Qloo features are hidden and Bartcash behaves as it did before Qloo: browse and search, with no matching.
 
 ## What changed after Sep 30, 2026
 

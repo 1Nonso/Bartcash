@@ -1,12 +1,14 @@
-import { useEffect } from "react";
-import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet, Animated, Easing, TouchableOpacity } from "react-native";
 import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { Image } from "expo-image";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Colors, Spacing, Typography } from "@/constants";
-import { hasSession, refreshTokens } from "@/config/auth";
+import { hasSession } from "@/config/auth";
+import { refreshSession } from "@/config/api";
+import { wakeServer } from "@/config/serverWake";
 import {
   Notifications,
   navigateFromNotification,
@@ -20,7 +22,7 @@ import lightLogo from "@/assets/images/bartcash-logo-white.svg";
 /** Minimum time the splash stays up, so the animation can be seen. */
 const SPLASH_MIN_MS = 6000;
 
-type Destination = "dashboard" | "onboarding" | "sign-in";
+type Destination = "dashboard" | "onboarding" | "sign-in" | "unreachable";
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -33,15 +35,61 @@ export default function SplashScreenComponent() {
   const ringScale = useAnimatedValue(0.4);
   const ringOpacity = useAnimatedValue(0.6);
 
-  // Where to go after the splash. Never throws; falls back to sign-in or
-  // onboarding when the session can't be restored.
-  const resolveDestination = async (): Promise<Destination> => {
+  // Free-tier server: "Waking up…" when slow; Try again when unreachable.
+  const [note, setNote] = useState<string | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
+  const cancelledRef = useRef(false);
+
+  // Where to go after the splash. Never throws. Wakes the server first (a
+  // sleeping Render service takes 30–60 s). A session the server rejects
+  // goes to sign-in; one it can't check yet is kept ("unreachable").
+  const resolveDestination = useCallback(async (): Promise<Destination> => {
     try {
-      if ((await hasSession()) && (await refreshTokens())) return "dashboard";
+      const signedIn = await hasSession();
+      const awake = await wakeServer({
+        onSlow: () => setNote("Waking up the server… this can take up to a minute."),
+      });
+      if (signedIn) {
+        const outcome = await refreshSession();
+        if (outcome === "ok") return "dashboard";
+        if (outcome === "unreachable" || !awake) return "unreachable";
+      }
     } catch {
       // fall through to the signed-out routes
     }
     return (await shouldShowOnboarding()) ? "onboarding" : "sign-in";
+  }, []);
+
+  const go = useCallback((destination: Destination) => {
+    if (cancelledRef.current) return;
+    if (destination === "unreachable") {
+      setNote(null);
+      setUnreachable(true);
+      return;
+    }
+    if (destination === "dashboard") {
+      router.replace("/(main-pages)/dashboard");
+      if (Notifications) {
+        registerForPushNotifications().catch(() => {});
+        // App was opened by tapping a notification while it was closed.
+        Notifications.getLastNotificationResponseAsync()
+          .then((response) => {
+            if (response) {
+              navigateFromNotification(response.notification.request.content.data);
+            }
+          })
+          .catch(() => {});
+      }
+    } else if (destination === "onboarding") {
+      router.replace("/(auth)/onboarding");
+    } else {
+      router.replace("/(auth)/sign-in");
+    }
+  }, []);
+
+  const retry = () => {
+    setUnreachable(false);
+    resolveDestination().then(go);
   };
 
   useEffect(() => {
@@ -105,36 +153,12 @@ export default function SplashScreenComponent() {
 
     // Check the session while the animation plays; leave once both the
     // check and the minimum display time are done.
-    let cancelled = false;
-    Promise.all([resolveDestination(), wait(SPLASH_MIN_MS)]).then(
-      ([destination]) => {
-        if (cancelled) return;
-        if (destination === "dashboard") {
-          router.replace("/(main-pages)/dashboard");
-          if (Notifications) {
-            registerForPushNotifications().catch(() => {});
-            // App was opened by tapping a notification while it was closed.
-            Notifications.getLastNotificationResponseAsync()
-              .then((response) => {
-                if (response) {
-                  navigateFromNotification(
-                    response.notification.request.content.data,
-                  );
-                }
-              })
-              .catch(() => {});
-          }
-        } else if (destination === "onboarding") {
-          router.replace("/(auth)/onboarding");
-        } else {
-          router.replace("/(auth)/sign-in");
-        }
-      },
-    );
+    cancelledRef.current = false;
+    Promise.all([resolveDestination(), wait(SPLASH_MIN_MS)]).then(([destination]) => go(destination));
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [logoOpacity, logoScale, ringOpacity, ringScale, taglineOpacity]);
+  }, [go, logoOpacity, logoScale, resolveDestination, ringOpacity, ringScale, taglineOpacity]);
 
   const logo = theme.isDark ? lightLogo : darkLogo;
 
@@ -172,6 +196,24 @@ export default function SplashScreenComponent() {
         trade · earn · thrive
       </Animated.Text>
 
+      {(note || unreachable) && (
+        <View style={styles.status}>
+          <Text style={[styles.statusText, { color: theme.textSecondary }]}>
+            {unreachable ? "Can't reach Bartcash right now. Check your connection and try again." : note}
+          </Text>
+          {unreachable && (
+            <TouchableOpacity
+              onPress={retry}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              style={[styles.retryBtn, { backgroundColor: theme.btnPrimary }]}
+            >
+              <Text style={[styles.retryText, { color: theme.btnPrimaryText }]}>Try again</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       <Text style={[styles.footer, { color: theme.textMuted }]}>
         by bartcash inc.
       </Text>
@@ -180,6 +222,17 @@ export default function SplashScreenComponent() {
 }
 
 const styles = StyleSheet.create({
+  status: {
+    position: "absolute",
+    bottom: 96,
+    left: Spacing[6],
+    right: Spacing[6],
+    alignItems: "center",
+    gap: Spacing[3],
+  },
+  statusText: { ...Typography.caption, textAlign: "center" },
+  retryBtn: { borderRadius: 999, paddingHorizontal: Spacing[6], paddingVertical: Spacing[3] },
+  retryText: { ...Typography.buttonSm },
   container: {
     flex: 1,
     alignItems: "center",

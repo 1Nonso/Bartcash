@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieparser from 'cookie-parser';
 import morgan from 'morgan';
+import { maskIds } from './utils/logSafe';
 import { rateLimit } from 'express-rate-limit';
 import authRoutes from '../src/routes/auth.routes';
 import userRoutes from '../src/routes/user.routes';
@@ -30,7 +31,13 @@ const limiter = rateLimit({
       'Too many request. Try again later',
 });
 
-app.use(morgan('combined'));
+// Apache "combined" format with ids masked in the URL (never log user ids).
+morgan.token('safe-url', (req) => maskIds((req as express.Request).originalUrl ?? req.url ?? ''));
+app.use(
+   morgan(
+      ':remote-addr - :remote-user [:date[clf]] ":method :safe-url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"',
+   ),
+);
 app.use(express.json());
 // CLIENT_URL: comma-separated web origins allowed to call the API (the web
 // build). Requests with no Origin (the mobile app, curl) are not affected.

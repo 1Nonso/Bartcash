@@ -8,10 +8,11 @@ declare global {
 }
 
 // Supabase's free session pooler allows 15 connections in all, and on
-// Render the API and the pg-boss worker share one process: Prisma gets 5
-// and pg-boss 4 (queue.config.ts), so requests never hit the limit
+// Render the API and the pg-boss worker share one process: Prisma gets 4
+// and pg-boss 3 (queue.config.ts), about 8 per instance with pg-boss's
+// listener, so even a deploy's brief old/new overlap stays near the limit
 // (EMAXCONNSESSION, seen Oct 25 with the default 10 + 10).
-export const PRISMA_POOL_MAX = 5;
+export const PRISMA_POOL_MAX = 4;
 
 const adapter = new PrismaPg({
    connectionString:

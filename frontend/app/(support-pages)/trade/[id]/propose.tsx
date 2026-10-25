@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
-  FlatList,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,37 +28,18 @@ import {
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { scoutDraftStore, type OfferDraft } from "@/config/scout";
+import { InfoButton } from "@/components/guide/InfoSheet";
 import {
   ItemDetail,
-  MarketplaceItem,
   getItemById,
   getMyItems,
 } from "@/config/items";
 import { createTrade } from "@/config/trades";
 import { showToast } from "@/hooks/toast";
+import { formatValuation, conditionLabel } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatValuation(item: ItemDetail): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `₦${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `₦${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "Brand New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
 function getPrimaryImage(item: ItemDetail): string | null {
   if (!item.images || item.images.length === 0) return null;
   const primary = item.images.find((img) => img.is_primary);
@@ -75,7 +56,7 @@ interface SelectableCardProps {
 
 function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatValuation(item);
+  const valuation = formatValuation(item.valuation);
 
   return (
     <TouchableOpacity
@@ -137,7 +118,7 @@ function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
         </Text>
         {valuation && (
           <View style={styles.valuationRow}>
-            <Ionicons name="trending-up" size={11} color={Colors.ai} />
+            <Ionicons name="trending-up" size={11} color={theme.ai} />
             <Text style={styles.valuationText}>{valuation}</Text>
           </View>
         )}
@@ -151,7 +132,10 @@ function SelectableCard({ item, selected, onToggle }: SelectableCardProps) {
 export default function ProposeTradeScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
-  const { id: receiverItemId } = useLocalSearchParams<{ id: string }>();
+  // draft=1: opened from "Draft an offer with Scout" (UI §13.11).
+  const { id: receiverItemId, draft: fromDraft } = useLocalSearchParams<{ id: string; draft?: string }>();
+  const [draftedBy, setDraftedBy] = useState<OfferDraft["drafted_by"] | null>(null);
+  const [valueNote, setValueNote] = useState<string | null>(null);
 
   // Data
   const [receiverItem, setReceiverItem] = useState<ItemDetail | null>(null);
@@ -168,8 +152,8 @@ export default function ProposeTradeScreen() {
   const [loadingMyItems, setLoadingMyItems] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load data ────────────────────────────────────────────────────────────────
 
@@ -198,7 +182,18 @@ export default function ProposeTradeScreen() {
         ]);
         setReceiverItem(itemData);
         setMyItems(myItemsData.items);
-      } catch (err: any) {
+        // Pre-fill from Scout's draft; every field stays editable.
+        const d = fromDraft === "1" ? scoutDraftStore.take(receiverItemId) : null;
+        if (d) {
+          const mine = new Set(myItemsData.items.map((i) => i.id));
+          setTradeType("item");
+          setSelectedItemIds(d.offered_item_ids.filter((id) => mine.has(id)));
+          setTopUpAmount(d.top_up_amount > 0 ? String(d.top_up_amount) : "");
+          setMessage(d.message);
+          setDraftedBy(d.drafted_by);
+          setValueNote(d.value_note);
+        }
+      } catch {
         Alert.alert("Error", "Failed to load listing details.");
         goBack();
       } finally {
@@ -207,7 +202,7 @@ export default function ProposeTradeScreen() {
       }
     };
     loadAll();
-  }, [receiverItemId]);
+  }, [contentAnim, headerAnim, receiverItemId, fromDraft]);
 
   // ── Toggle item selection ────────────────────────────────────────────────────
 
@@ -329,6 +324,7 @@ export default function ProposeTradeScreen() {
     if (type === "cash") {
       setSelectedItemIds([]);
       setTopUpAmount("");
+      setValueNote(null);
     } else {
       setCashAmount("");
     }
@@ -352,7 +348,7 @@ export default function ProposeTradeScreen() {
 
   if (!receiverItem) return null;
 
-  const receiverValuation = formatValuation(receiverItem);
+  const receiverValuation = formatValuation(receiverItem.valuation);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -404,7 +400,9 @@ export default function ProposeTradeScreen() {
             What would you trade for this item?
           </Text>
         </View>
-        <View style={{ minWidth: 60 }} />
+        <View style={{ minWidth: 60, alignItems: "flex-end" }}>
+          <InfoButton topic="trading" />
+        </View>
       </Animated.View>
 
       <Animated.ScrollView
@@ -416,6 +414,20 @@ export default function ProposeTradeScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
+        {draftedBy && (
+          <View style={[styles.scoutBanner, { backgroundColor: theme.aiSurface, borderColor: theme.aiLight }]}>
+            <Ionicons name="sparkles" size={16} color={theme.ai} />
+            <Text style={[styles.scoutBannerText, { color: theme.textPrimary }]}>
+              {draftedBy === "scout"
+                ? "Drafted by Scout - review before sending."
+                : "Draft prepared for you - review before sending."}
+            </Text>
+            <TouchableOpacity onPress={() => setDraftedBy(null)} hitSlop={8} accessibilityLabel="Dismiss">
+              <Ionicons name="close" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── YOU WANT section ── */}
         <View
           style={[
@@ -438,10 +450,10 @@ export default function ProposeTradeScreen() {
           </Text>
           {receiverValuation && (
             <View style={styles.valuationRow}>
-              <Ionicons name="trending-up" size={13} color={Colors.ai} />
+              <Ionicons name="trending-up" size={13} color={theme.ai} />
               <Text style={styles.valuationText}>{receiverValuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-                · AI Value
+                · Valuation
               </Text>
             </View>
           )}
@@ -699,7 +711,7 @@ export default function ProposeTradeScreen() {
                     },
                   ]}
                 >
-                  <Text style={styles.cashPrefix}>₦</Text>
+                  <Text style={styles.cashPrefix}>$</Text>
                   <TextInput
                     style={[styles.cashInput, { color: Colors.success }]}
                     placeholder="0"
@@ -760,11 +772,11 @@ export default function ProposeTradeScreen() {
         {/* ── AI Match Score ── */}
         {score !== null && (
           <View
-            style={[styles.matchCard, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.matchCard, { backgroundColor: theme.aiSurface }]}
           >
             <View style={styles.matchHeader}>
-              <Ionicons name="sparkles" size={16} color={Colors.ai} />
-              <Text style={styles.matchTitle}>AI Estimated Value</Text>
+              <Ionicons name="sparkles" size={16} color={theme.ai} />
+              <Text style={[styles.matchTitle, { color: theme.ai }]}>Automated Valuation Result</Text>
             </View>
 
             <View style={styles.matchValues}>
@@ -794,7 +806,7 @@ export default function ProposeTradeScreen() {
                           2
                       );
                     }, 0);
-                    return total > 0 ? `₦${total.toLocaleString()}` : "—";
+                    return total > 0 ? `$${total.toLocaleString()}` : "—";
                   })()}
                 </Text>
               </View>
@@ -819,20 +831,20 @@ export default function ProposeTradeScreen() {
               <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>
                 Trade match score
               </Text>
-              <Text style={[styles.scoreValue, { color: Colors.ai }]}>
+              <Text style={[styles.scoreValue, { color: theme.ai }]}>
                 {score}%
               </Text>
             </View>
             <View
               style={[
                 styles.progressTrack,
-                { backgroundColor: Colors.aiLight },
+                { backgroundColor: theme.aiLight },
               ]}
             >
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${score}%`, backgroundColor: Colors.ai },
+                  { width: `${score}%`, backgroundColor: theme.ai },
                 ]}
               />
             </View>
@@ -857,6 +869,14 @@ export default function ProposeTradeScreen() {
                 </Text>
               </View>
             )}
+          </View>
+        )}
+
+        {/* Scout's note on the value gap, under the fairness meter. */}
+        {valueNote && tradeType === "item" && (
+          <View style={[styles.valueNote, { backgroundColor: theme.aiSurface }]}>
+            <Ionicons name="information-circle-outline" size={16} color={theme.ai} />
+            <Text style={[styles.valueNoteText, { color: theme.textSecondary }]}>{valueNote}</Text>
           </View>
         )}
       </Animated.ScrollView>
@@ -1052,7 +1072,7 @@ const styles = StyleSheet.create({
     gap: Spacing[3],
   },
   matchHeader: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
-  matchTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  matchTitle: { ...Typography.bodyMedium },
   matchValues: { flexDirection: "row", gap: Spacing[4] },
   matchValueItem: { flex: 1, gap: 4 },
   matchValueLabel: { ...Typography.caption },
@@ -1066,6 +1086,25 @@ const styles = StyleSheet.create({
   scoreValue: { ...Typography.bodyMedium },
   progressTrack: { height: 6, borderRadius: Radius.full, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: Radius.full },
+  scoutBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing[2],
+    padding: Spacing[3],
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing[3],
+  },
+  scoutBannerText: { ...Typography.captionMedium, flex: 1 },
+  valueNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing[2],
+    padding: Spacing[3],
+    borderRadius: Radius.md,
+    marginTop: Spacing[3],
+  },
+  valueNoteText: { ...Typography.caption, flex: 1, lineHeight: 19 },
   fairTradeBadge: {
     flexDirection: "row",
     alignItems: "center",

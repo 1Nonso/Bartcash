@@ -39,6 +39,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -504,8 +505,8 @@ export default function ChatThreadScreen() {
   const flatListRef = useRef<FlatList>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const latestMessageIdRef = useRef<string | null>(null);
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const inputBarAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const inputBarAnim = useAnimatedValue(0);
 
   // ── Load current user ───────────────────────────────────────────────────────
 
@@ -535,50 +536,9 @@ export default function ChatThreadScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
-
-  // ── Initial data load ───────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!tradeId) return;
-    loadInitial();
-    return () => stopPolling();
-  }, [tradeId]);
-
-  const loadInitial = async () => {
-    setLoading(true);
-    try {
-      const [tradeData, messagesData] = await Promise.all([
-        getTradeById(tradeId!),
-        getTradeMessages(tradeId!, { limit: 30 }),
-      ]);
-      setTrade(tradeData);
-      setMessages(messagesData.messages);
-      setNextCursor(messagesData.next_cursor);
-
-      if (messagesData.messages.length > 0) {
-        latestMessageIdRef.current =
-          messagesData.messages[messagesData.messages.length - 1].id;
-      }
-
-      // Mark messages as read
-      await markMessagesRead(tradeId!).catch(() => {});
-
-      setError(null);
-      startPolling();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load chat.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [headerAnim, inputBarAnim]);
 
   // ── Polling ─────────────────────────────────────────────────────────────────
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollTimerRef.current = setInterval(pollMessages, POLL_INTERVAL);
-  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -616,6 +576,49 @@ export default function ChatThreadScreen() {
     } catch {
       // Silent — polling errors don't interrupt the user
     }
+  }, [tradeId]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollTimerRef.current = setInterval(pollMessages, POLL_INTERVAL);
+  }, [stopPolling, pollMessages]);
+
+  // ── Initial data load ───────────────────────────────────────────────────────
+
+  const loadInitial = async () => {
+    setLoading(true);
+    try {
+      const [tradeData, messagesData] = await Promise.all([
+        getTradeById(tradeId!),
+        getTradeMessages(tradeId!, { limit: 30 }),
+      ]);
+      setTrade(tradeData);
+      setMessages(messagesData.messages);
+      setNextCursor(messagesData.next_cursor);
+
+      if (messagesData.messages.length > 0) {
+        latestMessageIdRef.current =
+          messagesData.messages[messagesData.messages.length - 1].id;
+      }
+
+      // Mark messages as read
+      await markMessagesRead(tradeId!).catch(() => {});
+
+      setError(null);
+      startPolling();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to load chat.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!tradeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- (re)load when the trade changes; shows the loader first
+    loadInitial();
+    return () => stopPolling();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per trade id; loadInitial is recreated each render
   }, [tradeId]);
 
   // ── Load older messages ─────────────────────────────────────────────────────
@@ -1075,7 +1078,7 @@ export default function ChatThreadScreen() {
               {isPreAcceptance
                 ? "Chat unlocks once both parties agree on the trade terms."
                 : "This trade is closed. Messaging is disabled."}
-            </Text>{" "}
+            </Text>
           </View>
         ) : (
           <View style={styles.inputBar}>

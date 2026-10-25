@@ -18,6 +18,9 @@ import {
    decodeCursor,
    encodeCursor,
 } from '../utils/cursor';
+import createHttpError, {
+   HttpError,
+} from 'http-errors';
 
 const ROUND_LIMIT = 3;
 const ROUND_WINDOW_MS =
@@ -303,16 +306,26 @@ export async function create(
             }
          }
 
-         await tx.item.updateMany({
-            where: {
-               id: {
-                  in: itemIdsToLock,
+         const { count } =
+            await tx.item.updateMany({
+               where: {
+                  id: {
+                     in: itemIdsToLock,
+                  },
+                  status: 'available',
                },
-            },
-            data: {
-               status: 'in_trade',
-            },
-         });
+               data: {
+                  status: 'in_trade',
+               },
+            });
+         if (
+            count !==
+            itemIdsToLock.length
+         )
+            throw createHttpError(
+               422,
+               'One or more items are no longer available.',
+            );
 
          await tx.tradeOffer.create({
             data: {
@@ -1231,34 +1244,47 @@ export async function complete(
       ).map((ti) => ti.itemId);
       const completedAt = new Date();
 
-      await db.$transaction([
-         db.trade.update({
-            where: { id },
+      // Only the request that moves the trade out of accepted completes
+      // it, so a simultaneous confirm from both sides counts it once.
+      const completedNow = await db.$transaction(async (tx) => {
+         const moved = await tx.trade.updateMany({
+            where: { id, status: 'accepted' },
             data: {
                status: 'completed',
                completedAt,
             },
-         }),
-         db.item.updateMany({
+         });
+         if (moved.count === 0) return false;
+         await tx.item.updateMany({
             where: {
                id: { in: itemIds },
             },
             data: { status: 'traded' },
-         }),
-         db.transaction.update({
+         });
+         await tx.transaction.update({
             where: { tradeId: id },
             data: {
                status: 'completed',
                completedAt,
             },
-         }),
-      ]);
+         });
+         // total_trades is the count of completed trades (D-40).
+         await tx.user.updateMany({
+            where: {
+               id: {
+                  in: [trade.proposerId, trade.receiverId],
+               },
+            },
+            data: { totalTrades: { increment: 1 } },
+         });
+         return true;
+      });
       updated = {
          ...updated,
          status: 'completed',
       };
       // TODO: Notification + push dispatch to both parties (type: trade_completed)
-      await notify(
+      if (completedNow) await notify(
          [
             trade.proposerId,
             trade.receiverId,
@@ -1341,6 +1367,19 @@ export async function index(
       limit = 20,
    } = parsed.data;
 
+   // Rounds expire lazily (on open); expire the caller's timed-out ones
+   // first so the list never shows them as negotiating.
+   const timedOut = await db.trade.findMany({
+      where: {
+         deletedAt: null,
+         status: 'negotiating',
+         roundStartedAt: { lt: new Date(Date.now() - ROUND_WINDOW_MS) },
+         OR: [{ proposerId: userId }, { receiverId: userId }],
+      },
+      select: { id: true, status: true, roundStartedAt: true },
+   });
+   for (const t of timedOut) await expireIfRoundTimedOut(t);
+
    const where: any = {
       deletedAt: null,
       OR: [
@@ -1372,12 +1411,12 @@ export async function index(
          {
             OR: [
                {
-                  createdAt: {
+                  updatedAt: {
                      lt: c.date,
                   },
                },
                {
-                  createdAt: c.date,
+                  updatedAt: c.date,
                   id: { lt: c.id },
                },
             ],
@@ -1421,7 +1460,7 @@ export async function index(
                take: 1,
             },
          },
-         orderBy: { updatedAt: 'desc' },
+         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
          take: limit + 1,
       });
 
@@ -1432,7 +1471,7 @@ export async function index(
    const nextCursor =
       hasMore && last
          ? encodeCursor(
-              last.createdAt,
+              last.updatedAt,
               last.id,
            )
          : null;
@@ -1525,10 +1564,34 @@ export async function index(
                  }
                : null,
             unread_count: unreadCount,
+            // The caller's side; cash and top-ups come from the proposer.
+            role:
+               trade.proposerId === userId
+                  ? 'proposer'
+                  : 'receiver',
+            // Whose move it is (negotiating only), as on GET /trades/:id.
+            awaiting_response_from:
+               trade.status === 'negotiating'
+                  ? trade.awaitingResponseFrom
+                  : null,
             updated_at: trade.updatedAt,
          };
       }),
    );
+
+   // Unread messages across all the caller's chats (not just this page).
+   const unreadTotal = await db.message.count({
+      where: {
+         senderId: { not: userId },
+         readAt: null,
+         deletedAt: null,
+         trade: {
+            deletedAt: null,
+            status: 'accepted',
+            OR: [{ proposerId: userId }, { receiverId: userId }],
+         },
+      },
+   });
 
    return res
       .status(StatusCodes.OK)
@@ -1538,6 +1601,7 @@ export async function index(
          data: {
             trades: formatted,
             next_cursor: nextCursor,
+            unread_total: unreadTotal,
          },
       });
 }

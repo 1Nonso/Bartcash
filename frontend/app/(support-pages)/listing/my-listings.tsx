@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   FlatList,
   Image,
@@ -13,6 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,37 +28,19 @@ import {
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { ItemDetail, deleteItem, getMyItems } from "@/config/items";
+import { formatValuation, conditionLabel } from "@/constants/listing";
 
-type FilterTab = "available" | "inactive" | "traded";
+type FilterTab = "all" | "available" | "in_trade" | "traded" | "inactive";
 
 const FILTER_TABS: { label: string; value: FilterTab }[] = [
+  { label: "All", value: "all" },
   { label: "Available", value: "available" },
   { label: "Inactive", value: "inactive" },
   { label: "Traded", value: "traded" },
+  { label: "In Trade", value: "in_trade" },
 ];
 
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function formatValuation(item: ItemDetail): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `$${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `$${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
 // ─── Listing card ─────────────────────────────────────────────────────────────
-
 interface MyListingCardProps {
   item: ItemDetail;
   onEdit: () => void;
@@ -72,7 +55,7 @@ function MyListingCard({
   onPress,
 }: MyListingCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatValuation(item);
+  const valuation = formatValuation(item.valuation);
 
   return (
     <TouchableOpacity
@@ -138,7 +121,7 @@ function MyListingCard({
               <Ionicons name="trending-up" size={12} color={Colors.ai} />
               <Text style={styles.valuationText}>{valuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-                · AI Value
+                · Valuation
               </Text>
             </View>
           )}
@@ -242,7 +225,6 @@ export default function MyListingsScreen() {
   const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<ItemDetail[]>([]);
-  const [filteredItems, setFilteredItems] = useState<ItemDetail[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("available");
   const [searchQuery, setSearchQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -251,8 +233,8 @@ export default function MyListingsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -269,7 +251,7 @@ export default function MyListingsScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -297,23 +279,13 @@ export default function MyListingsScreen() {
       setLoading(false);
     };
     load();
-  }, [activeTab]);
+  }, [activeTab, fetchItems]);
 
   // ── Search filter (client-side) ──────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredItems(items);
-    } else {
-      const q = searchQuery.toLowerCase();
-      setFilteredItems(
-        items.filter(
-          (item) =>
-            item.title.toLowerCase().includes(q) ||
-            item.description?.toLowerCase().includes(q),
-        ),
-      );
-    }
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return q ? items.filter((item) => item.title.toLowerCase().includes(q)) : items;
   }, [searchQuery, items]);
 
   // ── Refresh ──────────────────────────────────────────────────────────────────

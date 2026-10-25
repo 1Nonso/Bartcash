@@ -7,12 +7,23 @@
  *  - Automatic token refresh when a 401 is received
  *  - Request queuing during token refresh
  *  - Session clearing when refresh token is expired
+ *  - Waking the free-tier server after a long idle (config/serverWake.ts)
  */
 
 import axios, { InternalAxiosRequestConfig } from "axios";
-import { getAccessToken, refreshTokens, clearSession } from "./auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  REFRESH_TOKEN_KEY,
+  getAccessToken,
+  setAccessToken,
+  clearSession,
+} from "./session";
+import { noteServerContact, serverMayBeAsleep, wakeServer } from "./serverWake";
 
 // ─── Create Instance ──────────────────────────────────────────────────────────
+// axios.create is the documented factory; the default-member rule is a false
+// positive here.
+// eslint-disable-next-line import/no-named-as-default-member
 const api = axios.create({
   baseURL: process.env.EXPO_PUBLIC_API_BASE_URL,
   timeout: 10000,
@@ -44,11 +55,63 @@ function processQueue(error: any, token: string | null = null) {
   failedQueue = [];
 }
 
+// ─── Refresh Token ────────────────────────────────────────────────────────────
+/**
+ * POST /auth/refresh
+ * Exchanges the stored refresh token for a new access + refresh token pair.
+ * Called automatically by the response interceptor when a 401 is received.
+ * Also called on app start to restore the session (re-exported by auth.ts).
+ * Lives here, not in auth.ts, so api.ts never imports auth.ts.
+ */
+export type RefreshOutcome = "ok" | "invalid" | "unreachable";
+
+/**
+ * "invalid": the server rejected the refresh token (expired or revoked), so
+ * the session is cleared. "unreachable": no answer (asleep, offline, 5xx);
+ * the session is kept so the next try can restore it.
+ */
+export async function refreshSession(): Promise<RefreshOutcome> {
+  try {
+    const storedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!storedRefreshToken) return "invalid";
+
+    const response = await api.post("/auth/refresh", {
+      refresh_token: storedRefreshToken,
+    });
+
+    if (response.data?.data?.access_token) {
+      setAccessToken(response.data.data.access_token);
+      await AsyncStorage.setItem(
+        REFRESH_TOKEN_KEY,
+        response.data.data.refresh_token,
+      );
+      return "ok";
+    }
+    return "unreachable";
+  } catch (err: any) {
+    const status = err?.response?.status;
+    if (status === 400 || status === 401 || status === 403) {
+      // Refresh token expired or revoked — session is dead
+      await clearSession();
+      return "invalid";
+    }
+    return "unreachable";
+  }
+}
+
+export async function refreshTokens(): Promise<boolean> {
+  return (await refreshSession()) === "ok";
+}
+
 // ─── Request Interceptor ──────────────────────────────────────────────────────
 // Attaches the current access token to every outgoing request.
 
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
+    // After a long idle the free-tier server may be asleep: wake it first
+    // (shared with any wake-up already running) so this request doesn't
+    // time out. If it can't be woken, the request still goes and fails as usual.
+    if (serverMayBeAsleep()) await wakeServer();
     const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -64,8 +127,12 @@ api.interceptors.request.use(
 // clear the session and let the app redirect to login.
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    noteServerContact();
+    return response;
+  },
   async (error) => {
+    if (error.response) noteServerContact();
     const originalRequest = error.config;
 
     // Only attempt refresh on 401 and only once per request
@@ -97,22 +164,20 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const success = await refreshTokens();
+        const outcome = await refreshSession();
 
-        if (success) {
+        if (outcome === "ok") {
           const newToken = getAccessToken();
           processQueue(null, newToken);
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return api(originalRequest);
-        } else {
-          // Refresh token is dead — clear session
-          processQueue(error, null);
-          await clearSession();
-          return Promise.reject(error);
         }
+        // "invalid" already cleared the session; "unreachable" keeps it
+        // so a slow or sleeping server never signs the user out.
+        processQueue(error, null);
+        return Promise.reject(error);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        await clearSession();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.bartcash.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/bartcash_logo_dark.png",
         "backgroundColor": "#FFFFFF"
@@ -31,7 +32,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#ffffff"
         }
       ],

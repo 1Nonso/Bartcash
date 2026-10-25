@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   ScrollView,
@@ -12,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,9 +23,15 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
-  updateItem,
   retryItemValuation,
+  publishItem,
 } from "@/config/items";
+import { goBack } from "@/hooks/navigation";
+import { useFeatures } from "@/hooks/useFeatures";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
+import { apiErrorMessage, setWants } from "@/config/wants";
+import WantPicker from "@/components/WantPicker";
 
 const POLL_INTERVAL = 5000;
 const POLL_TIMEOUT_MS = 60000; // Stop polling after 60s
@@ -39,6 +46,18 @@ function formatCondition(c: string): string {
   return map[c] ?? c;
 }
 
+function declaredValueWarning(
+  declared: number,
+  v: ItemValuationDetail | null,
+): string | null {
+  if (v?.status !== "completed" || !v.value_min || !v.value_max) return null;
+  if (declared < Number(v.value_min) * 0.6)
+    return "Your declared value is significantly below our estimate. You may want to double-check it.";
+  if (declared > Number(v.value_max) * 1.4)
+    return "Your declared value is significantly above our estimate. You may want to double-check it.";
+  return null;
+}
+
 export default function ReviewListingScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
@@ -51,20 +70,97 @@ export default function ReviewListingScreen() {
   const [declaredValue, setDeclaredValue] = useState("");
   const [retrying, setRetrying] = useState(false);
 
+  // Wants (Qloo, UI §13.8). With the flag off the screen is unchanged.
+  const { qloo } = useFeatures();
+
+  // First-visit tour (components/guide): valuation, wants (flag on), the ⓘ.
+  const valuationRef = useRef<View>(null);
+  const wantsRef = useRef<View>(null);
+  const infoRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      {
+        target: valuationRef,
+        text: "This is your item's Automated Valuation Result. Use it to set a fair value.",
+      },
+      ...(qloo
+        ? [
+            {
+              target: wantsRef,
+              text: "Pick up to 3 categories you'd take in exchange. Scout uses these to find your matches.",
+            },
+          ]
+        : []),
+      { target: infoRef, text: "Tap ⓘ or the Scout badge to see how these work." },
+    ],
+    [qloo],
+  );
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("review", tourSteps, !loading, { scrollRef });
+  const [picked, setPicked] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [showPickError, setShowPickError] = useState(false);
+  // Last wants sent, so a publish retry does not resend unchanged wants.
+  const savedWantsRef = useRef<string | null>(null);
+
+  const [showValueError, setShowValueError] = useState(false);
+  const declaredNum = parseFloat(declaredValue.replace(/,/g, ""));
+  const declaredValid = !isNaN(declaredNum) && declaredNum > 0;
+  const valueWarning = declaredValid
+    ? declaredValueWarning(declaredNum, valuation)
+    : null;
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const contentAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   const CONFIDENCE_LEVELS: Record<
     string,
     { label: string; bars: number; color: string }
   > = {
     high: { label: "High Confidence", bars: 3, color: Colors.success },
-    medium: { label: "Medium Confidence", bars: 2, color: Colors.ai },
+    medium: { label: "Medium Confidence", bars: 2, color: theme.ai },
     low: { label: "Low Confidence", bars: 1, color: Colors.danger },
   };
+
+  // ── Polling ──────────────────────────────────────────────────────────────────
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((itemId: string) => {
+    stopPolling();
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const v = await getItemValuation(itemId);
+        setValuation(v);
+        if (v.status !== "pending") {
+          stopPolling();
+        }
+      } catch {
+        stopPolling();
+      }
+    }, POLL_INTERVAL);
+
+    // Safety timeout — stop after 60s; if still pending, show it as failed
+    // so the Retry button appears instead of an endless spinner.
+    pollTimeoutRef.current = setTimeout(() => {
+      stopPolling();
+      setValuation((prev) =>
+        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
+      );
+    }, POLL_TIMEOUT_MS);
+  }, [stopPolling]);
 
   // ── Load item ────────────────────────────────────────────────────────────────
 
@@ -75,11 +171,10 @@ export default function ReviewListingScreen() {
         const data = await getItemById(id);
         setItem(data);
         setValuation(data.valuation);
+        setNote(data.desired_trade ?? "");
 
         if (data.valuation?.status === "pending") {
           startPolling(id);
-        } else if (data.valuation?.status === "completed") {
-          animateProgress(parseFloat(data.valuation.confidence ?? "0"));
         }
       } catch {
         Alert.alert(
@@ -100,80 +195,37 @@ export default function ReviewListingScreen() {
     return () => {
       stopPolling();
     };
-  }, [id]);
-
-  // ── Polling ──────────────────────────────────────────────────────────────────
-
-  const startPolling = useCallback((itemId: string) => {
-    stopPolling();
-
-    pollRef.current = setInterval(async () => {
-      try {
-        const v = await getItemValuation(itemId);
-        setValuation(v);
-        if (v.status !== "pending") {
-          stopPolling();
-          if (v.status === "completed") {
-            animateProgress(parseFloat(v.confidence ?? "0"));
-          }
-        }
-      } catch {
-        stopPolling();
-      }
-    }, POLL_INTERVAL);
-
-    // Safety timeout — stop after 60s regardless
-    pollTimeoutRef.current = setTimeout(() => {
-      stopPolling();
-      // If still pending after timeout, set to failed so the user isn't stuck
-      setValuation((prev) =>
-        prev?.status === "pending" ? { ...prev, status: "failed" } : prev,
-      );
-    }, POLL_TIMEOUT_MS);
-  }, []);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const animateProgress = (confidence: number) => {
-    Animated.timing(progressAnim, {
-      toValue: Math.min(Math.max(confidence, 0), 100) / 100,
-      duration: 900,
-      useNativeDriver: false,
-    }).start();
-  };
+  }, [contentAnim, id, startPolling, stopPolling]);
 
   // ── Publish ──────────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async () => {
     if (!item) return;
-
-    if (declaredValue) {
-      const val = parseFloat(declaredValue);
-      if (isNaN(val) || val <= 0) {
-        Alert.alert("Invalid Value", "Please enter a valid declared value.");
-        return;
-      }
+    const needsPick = qloo && picked.length === 0;
+    if (!declaredValid || needsPick) {
+      setShowValueError(!declaredValid);
+      setShowPickError(needsPick);
+      return;
     }
 
     setPublishing(true);
     try {
-      if (declaredValue) {
-        const { warnings } = await updateItem(item.id, {
-          user_declared_value: parseFloat(declaredValue),
-        });
-        if (warnings?.user_declared_value) {
-          Alert.alert("Heads up", warnings.user_declared_value);
+      if (qloo) {
+        const trimmed = note.trim();
+        const signature = JSON.stringify([picked, trimmed]);
+        if (savedWantsRef.current !== signature) {
+          try {
+            await setWants(item.id, picked, trimmed || null);
+          } catch (err: any) {
+            Alert.alert(
+              "Error",
+              apiErrorMessage(err, "Could not save your choices. Please try again."),
+            );
+            return;
+          }
+          savedWantsRef.current = signature;
         }
       }
-
+      await publishItem(item.id, declaredNum);
       router.replace({
         pathname: "/(support-pages)/listing/[id]",
         params: { id: item.id },
@@ -186,13 +238,14 @@ export default function ReviewListingScreen() {
     } finally {
       setPublishing(false);
     }
-  }, [item, declaredValue]);
+  }, [item, declaredValid, declaredNum, qloo, picked, note]);
 
   const handleEditDetails = useCallback(() => {
-    router.replace({
-      pathname: "/(support-pages)/listing/create",
+    router.push({
+      pathname: "/(support-pages)/listing/[id]/edit",
+      params: { id: item?.id },
     });
-  }, []);
+  }, [item?.id]);
 
   const handleRetryValuation = useCallback(async () => {
     if (!item) return;
@@ -213,7 +266,7 @@ export default function ReviewListingScreen() {
 
   // ── Valuation section ────────────────────────────────────────────────────────
 
-  const ValuationSection = () => {
+  const renderValuation = () => {
     const level =
       valuation?.status === "completed" && valuation.confidence
         ? CONFIDENCE_LEVELS[valuation.confidence]
@@ -227,25 +280,28 @@ export default function ReviewListingScreen() {
 
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <View ref={infoRef} collapsable={false}>
+            <InfoButton topic="valuation" color={theme.ai} />
+          </View>
         </View>
 
         {valuation?.status === "pending" && (
           <View style={styles.pendingRow}>
-            <ActivityIndicator size="small" color={Colors.ai} />
+            <ActivityIndicator size="small" color={theme.ai} />
             <Text style={[styles.pendingText, { color: theme.textMuted }]}>
-              AI is calculating your item{"'"}s value...
+              Calculating your item{"'"}s value...
             </Text>
           </View>
         )}
 
         {valuation?.status === "completed" && aiRange && level && (
           <>
-            <Text style={styles.valuationRange}>{aiRange}</Text>
+            <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{aiRange}</Text>
             <Text style={[styles.valuationSub, { color: theme.textMuted }]}>
               Based on similar items and market data
             </Text>
@@ -264,7 +320,7 @@ export default function ReviewListingScreen() {
                       styles.confidenceBar,
                       {
                         backgroundColor:
-                          i < level.bars ? level.color : Colors.aiLight,
+                          i < level.bars ? level.color : theme.aiLight,
                       },
                     ]}
                   />
@@ -275,15 +331,15 @@ export default function ReviewListingScreen() {
             <View
               style={[
                 styles.confidenceNote,
-                { backgroundColor: Colors.aiLight },
+                { backgroundColor: theme.aiLight },
               ]}
             >
               <Ionicons
                 name="information-circle-outline"
                 size={13}
-                color={Colors.ai}
+                color={theme.ai}
               />
-              <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
+              <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
                 {level.label}
                 {level.bars === 1 ? " — estimate may vary" : ""}
               </Text>
@@ -304,11 +360,11 @@ export default function ReviewListingScreen() {
               activeOpacity={0.85}
             >
               {retrying ? (
-                <ActivityIndicator size="small" color={Colors.ai} />
+                <ActivityIndicator size="small" color={theme.ai} />
               ) : (
                 <>
-                  <Ionicons name="refresh" size={14} color={Colors.ai} />
-                  <Text style={[styles.retryBtnText, { color: Colors.ai }]}>
+                  <Ionicons name="refresh" size={14} color={theme.ai} />
+                  <Text style={[styles.retryBtnText, { color: theme.ai }]}>
                     Retry valuation
                   </Text>
                 </>
@@ -323,7 +379,7 @@ export default function ReviewListingScreen() {
             { borderTopColor: theme.borderSubtle },
           ]}
         />
-        <Text style={[styles.overrideLabelText, { color: Colors.ai }]}>
+        <Text style={[styles.overrideLabelText, { color: theme.ai }]}>
           Please declare a Value for your good below
         </Text>
         <Text
@@ -332,7 +388,7 @@ export default function ReviewListingScreen() {
             { color: theme.textMuted, marginBottom: Spacing[2] },
           ]}
         >
-          Compulsory — what you think it's worth
+          Compulsory — what you think it&apos;s worth
         </Text>
         <TextInput
           style={[
@@ -347,8 +403,26 @@ export default function ReviewListingScreen() {
           placeholderTextColor={theme.textPlaceholder}
           value={declaredValue}
           onChangeText={setDeclaredValue}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
         />
+
+        {valueWarning && (
+          <View style={styles.warnRow}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={14}
+              color={Colors.warning}
+            />
+            <Text style={[styles.warnText, { color: Colors.warning }]}>
+              {valueWarning}
+            </Text>
+          </View>
+        )}
+        {showValueError && !declaredValid && (
+          <Text style={[styles.warnText, { color: Colors.danger }]}>
+            Enter your value to publish.
+          </Text>
+        )}
       </View>
     );
   };
@@ -395,7 +469,7 @@ export default function ReviewListingScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={handleEditDetails}
+          onPress={() => goBack()}
           style={styles.backBtn}
           activeOpacity={0.7}
         >
@@ -416,6 +490,9 @@ export default function ReviewListingScreen() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={tour.onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         style={{ opacity: contentAnim }}
         contentContainerStyle={[
@@ -423,7 +500,25 @@ export default function ReviewListingScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
       >
-        <ValuationSection />
+        <View ref={valuationRef} collapsable={false}>
+          {renderValuation()}
+        </View>
+
+        {qloo && (
+          <View ref={wantsRef} collapsable={false}>
+          <WantPicker
+            itemId={item.id}
+            picked={picked}
+            onChangePicked={(ids) => {
+              setPicked(ids);
+              if (ids.length > 0) setShowPickError(false);
+            }}
+            note={note}
+            onChangeNote={setNote}
+            showPickError={showPickError}
+          />
+          </View>
+        )}
 
         {/* Images preview */}
         <View
@@ -491,7 +586,7 @@ export default function ReviewListingScreen() {
               </>
             )}
 
-            {item.desired_trade && (
+            {!qloo && item.desired_trade && (
               <>
                 <View
                   style={[
@@ -582,6 +677,7 @@ export default function ReviewListingScreen() {
           )}
         </TouchableOpacity>
       </View>
+      {tour.node}
     </View>
   );
 }
@@ -621,13 +717,12 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
     marginBottom: Spacing[3],
   },
-  valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  valuationTitle: { ...Typography.bodyMedium },
   pendingRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
   pendingText: { ...Typography.body },
   valuationRange: {
     fontSize: 28,
     fontWeight: "700",
-    color: Colors.text.primary,
     marginBottom: Spacing[1],
   },
   valuationSub: { ...Typography.caption, marginBottom: Spacing[3] },
@@ -699,6 +794,8 @@ const styles = StyleSheet.create({
   previewLabel: { ...Typography.bodyMedium, marginBottom: Spacing[1] },
   previewBody: { ...Typography.body, lineHeight: 21 },
   locationRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
+  warnRow: { flexDirection: "row", gap: Spacing[1], marginTop: Spacing[2] },
+  warnText: { ...Typography.caption, flex: 1 },
 
   // CTA
   ctaBar: {

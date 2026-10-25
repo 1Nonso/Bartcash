@@ -11,9 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -24,27 +26,19 @@ import {
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { TradeListItem, TradeStatus, getTrades } from "@/config/trades";
+import { timeAgo } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return `${Math.floor(days / 7)}w`;
-}
-
-function statusConfig(status: TradeStatus): {
+function statusConfig(
+  status: TradeStatus | "pending",
+  theme: ReturnType<typeof useAuthTheme>,
+): {
   label: string;
   color: string;
   bg: string;
 } {
   switch (status) {
+    case "pending": // legacy rows
     case "negotiating":
       return {
         label: "Negotiating",
@@ -68,8 +62,8 @@ function statusConfig(status: TradeStatus): {
     case "cancelled":
       return {
         label: "Cancelled",
-        color: Colors.gray[500],
-        bg: Colors.gray[100],
+        color: theme.textSecondary,
+        bg: theme.surfaceVariant,
       };
     case "disputed":
       return {
@@ -78,7 +72,7 @@ function statusConfig(status: TradeStatus): {
         bg: Colors.danger + "15",
       };
     default:
-      return { label: status, color: Colors.gray[500], bg: Colors.gray[100] };
+      return { label: status, color: theme.textSecondary, bg: theme.surfaceVariant };
   }
 }
 
@@ -115,10 +109,10 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
             style={[
               styles.avatar,
               styles.avatarFallback,
-              { backgroundColor: Colors.gray[200] },
+              { backgroundColor: theme.surfaceVariant },
             ]}
           >
-            <Ionicons name="person" size={18} color={Colors.gray[500]} />
+            <Ionicons name="person" size={18} color={theme.textMuted} />
           </View>
         )}
         {/* Online-ish indicator — shown for accepted trades */}
@@ -148,7 +142,7 @@ function ChatRow({ trade, onPress }: ChatRowProps) {
             {fullName}
           </Text>
           <Text style={[styles.chatTime, { color: theme.textMuted }]}>
-            {timeAgo(trade.updated_at)}
+            {timeAgo(trade.last_message?.created_at ?? trade.updated_at)}
           </Text>
         </View>
         <Text
@@ -188,7 +182,7 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
   const theme = useAuthTheme();
   const party = trade.other_party;
   const fullName = `${party.first_name} ${party.last_name}`;
-  const { label, color, bg } = statusConfig(trade.status);
+  const { label, color, bg } = statusConfig(trade.status, theme);
 
   return (
     <TouchableOpacity
@@ -211,10 +205,10 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
             style={[
               styles.offerAvatar,
               styles.avatarFallback,
-              { backgroundColor: Colors.gray[200] },
+              { backgroundColor: theme.surfaceVariant },
             ]}
           >
-            <Ionicons name="person" size={16} color={Colors.gray[500]} />
+            <Ionicons name="person" size={16} color={theme.textMuted} />
           </View>
         )}
         <View style={styles.offerHeaderInfo}>
@@ -234,49 +228,65 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
         <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
       </View>
 
-      {/* Items preview */}
-      {((trade.my_items_preview ?? []).length > 0 ||
-        (trade.their_items_preview ?? []).length > 0) && (
-        <View
-          style={[styles.offerItems, { borderTopColor: theme.borderSubtle }]}
+      {/* Turn (negotiating only) */}
+      {!!trade.awaiting_response_from && (
+        <Text
+          style={[
+            styles.offerTurn,
+            {
+              color:
+                trade.awaiting_response_from === party.id
+                  ? theme.textMuted
+                  : Colors.primary,
+            },
+          ]}
         >
-          <View style={styles.offerItemsRow}>
-            <Text style={[styles.offerItemsLabel, { color: theme.textMuted }]}>
-              Your Offer
-            </Text>
-            <View style={styles.offerImageRow}>
-              {(trade.my_items_preview ?? []).slice(0, 3).map((url, i) => (
-                <Image
-                  key={i}
-                  source={{ uri: url }}
-                  style={styles.offerItemImage}
-                  resizeMode="cover"
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.offerSwap}>
-            <Ionicons name="swap-vertical" size={16} color={theme.textMuted} />
-          </View>
-
-          <View style={styles.offerItemsRow}>
-            <Text style={[styles.offerItemsLabel, { color: theme.textMuted }]}>
-              Their Offer
-            </Text>
-            <View style={styles.offerImageRow}>
-              {(trade.their_items_preview ?? []).slice(0, 3).map((url, i) => (
-                <Image
-                  key={i}
-                  source={{ uri: url }}
-                  style={styles.offerItemImage}
-                  resizeMode="cover"
-                />
-              ))}
-            </View>
-          </View>
-        </View>
+          {trade.awaiting_response_from === party.id
+            ? `Waiting for ${party.first_name}`
+            : "Your turn"}
+        </Text>
       )}
+
+      {/* You give / You get (cash and top-ups come from the proposer) */}
+      {(() => {
+        const offer = trade.current_offer;
+        const cash =
+          offer?.trade_type === "cash" && offer.cash_amount
+            ? `$${Number(offer.cash_amount).toLocaleString()} cash`
+            : offer?.top_up_amount && Number(offer.top_up_amount) > 0
+              ? `+ $${Number(offer.top_up_amount).toLocaleString()} top-up`
+              : null;
+        const proposer = trade.role === "proposer";
+        const rows = [
+          { label: "You give", images: trade.my_items_preview ?? [], cash: proposer ? cash : null },
+          { label: "You get", images: trade.their_items_preview ?? [], cash: proposer ? null : cash },
+        ];
+        if (rows.every((r) => r.images.length === 0 && !r.cash)) return null;
+        return (
+          <View style={[styles.offerItems, { borderTopColor: theme.borderSubtle }]}>
+            {rows.map((r, idx) => (
+              <React.Fragment key={r.label}>
+                {idx === 1 && (
+                  <View style={styles.offerSwap}>
+                    <Ionicons name="swap-vertical" size={16} color={theme.textMuted} />
+                  </View>
+                )}
+                <View style={styles.offerItemsRow}>
+                  <Text style={[styles.offerItemsLabel, { color: theme.textMuted }]}>{r.label}</Text>
+                  <View style={styles.offerImageRow}>
+                    {r.images.slice(0, 3).map((url, i) => (
+                      <Image key={i} source={{ uri: url }} style={styles.offerItemImage} resizeMode="cover" />
+                    ))}
+                    {!!r.cash && (
+                      <Text style={[styles.offerCash, { color: theme.textPrimary }]}>{r.cash}</Text>
+                    )}
+                  </View>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+        );
+      })()}
     </TouchableOpacity>
   );
 }
@@ -286,6 +296,7 @@ function OfferCard({ trade, onPress }: OfferCardProps) {
 export default function InboxScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
 
   const [activeTab, setActiveTab] = useState<InboxTab>("chats");
   const [trades, setTrades] = useState<TradeListItem[]>([]);
@@ -294,9 +305,10 @@ export default function InboxScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -313,7 +325,7 @@ export default function InboxScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -337,17 +349,12 @@ export default function InboxScreen() {
         setTrades(data.trades);
       }
       setNextCursor(data.next_cursor);
-
-      // Count total unread across chats
-      if (tab === "chats") {
-        const unread = data.trades.reduce(
-          (sum, t) => sum + (t.unread_count ?? 0),
-          0,
-        );
-        setTotalUnread(unread);
-      }
-    } catch (err: any) {
-      console.error("Failed to load inbox:", err);
+      // Unread across all chats (server total), whichever tab is open.
+      setTotalUnread(data.unread_total ?? 0);
+      if (!cursor) setLoadError(false);
+    } catch {
+      // A failed first page shows the error with Retry, not "no trades".
+      if (!cursor) setLoadError(true);
     }
   }, []);
 
@@ -359,7 +366,25 @@ export default function InboxScreen() {
       setLoading(false);
     };
     load();
+  }, [activeTab, fetchTrades]);
+
+  // Reload on return (after accepting, declining or rebargaining on the
+  // trade screens), without the skeleton. Skips the first focus, which the
+  // effect above already loads.
+  const focusedOnce = useRef(false);
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
   }, [activeTab]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedOnce.current) {
+        focusedOnce.current = true;
+        return;
+      }
+      fetchTrades(activeTabRef.current);
+    }, [fetchTrades]),
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -413,7 +438,24 @@ export default function InboxScreen() {
 
   const renderEmpty = useCallback(
     () =>
-      loading ? null : (
+      loading ? null : loadError ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="cloud-offline-outline" size={48} color={theme.textMuted} />
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
+            Couldn&apos;t load your messages
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
+            Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={[styles.emptyBtn, { backgroundColor: Colors.primary }]}
+            onPress={handleRefresh}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.emptyBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
         <View style={styles.emptyState}>
           <Ionicons
             name={
@@ -422,7 +464,7 @@ export default function InboxScreen() {
                 : "swap-horizontal-outline"
             }
             size={48}
-            color={Colors.gray[300]}
+            color={theme.textMuted}
           />
           <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
             {activeTab === "chats" ? "No active chats" : "No trade offers"}
@@ -441,7 +483,7 @@ export default function InboxScreen() {
           </TouchableOpacity>
         </View>
       ),
-    [loading, activeTab, theme],
+    [loading, loadError, activeTab, theme, handleRefresh],
   );
 
   const renderSkeleton = useCallback(
@@ -461,21 +503,21 @@ export default function InboxScreen() {
             <View
               style={[
                 styles.skeletonAvatar,
-                { backgroundColor: Colors.gray[100] },
+                { backgroundColor: theme.surfaceVariant },
               ]}
             />
             <View style={styles.skeletonContent}>
               <View
                 style={[
                   styles.skeletonLine,
-                  { backgroundColor: Colors.gray[100], width: "55%" },
+                  { backgroundColor: theme.surfaceVariant, width: "55%" },
                 ]}
               />
               <View
                 style={[
                   styles.skeletonLine,
                   {
-                    backgroundColor: Colors.gray[100],
+                    backgroundColor: theme.surfaceVariant,
                     width: "80%",
                     marginTop: 6,
                   },
@@ -636,7 +678,7 @@ export default function InboxScreen() {
             contentContainerStyle={[
               styles.listContent,
               {
-                paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[4],
+                paddingBottom: tabSpace,
               },
             ]}
             showsVerticalScrollIndicator={false}
@@ -785,6 +827,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   offerSwap: { alignItems: "center" },
+  offerTurn: { ...Typography.captionMedium, marginTop: Spacing[2] },
+  offerCash: { ...Typography.captionMedium, alignSelf: "center" },
 
   // Empty
   emptyState: {

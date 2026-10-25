@@ -10,10 +10,9 @@
  *   POST /user/avatar   — upload new profile photo (multipart/form-data)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -26,7 +25,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { Alert } from "@/config/alert";
+import { appendImage } from "@/config/upload";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
+import {  } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -35,7 +37,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -86,8 +87,27 @@ export default function EditProfileScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Entrance animations
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const bodyAnim = useAnimatedValue(0);
+
+  // ── Fetch current profile ────────────────────────────────────────────────────
+
+  const fetchProfile = async () => {
+    try {
+      const response = await api.get("/user/profile");
+      const user: UserProfile = response.data.data.user;
+      setProfile(user);
+      setFirstName(user.firstName);
+      setLastName(user.lastName);
+      setBio(user.bio ?? "");
+      setLocation(user.location ?? "");
+      setAvatarUri(user.profilePhoto);
+    } catch {
+      Alert.alert("Error", "Failed to load profile. Please try again.");
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -105,37 +125,33 @@ export default function EditProfileScreen() {
       }),
     ]).start();
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     fetchProfile();
-  }, []);
-
-  // ── Fetch current profile ────────────────────────────────────────────────────
-
-  const fetchProfile = async () => {
-    try {
-      const response = await api.get("/user/profile");
-      const user: UserProfile = response.data.data.user;
-      setProfile(user);
-      setFirstName(user.firstName);
-      setLastName(user.lastName);
-      setBio(user.bio ?? "");
-      setLocation(user.location ?? "");
-      setAvatarUri(user.profilePhoto);
-    } catch (err: any) {
-      Alert.alert("Error", "Failed to load profile. Please try again.");
-    } finally {
-      setLoadingProfile(false);
-    }
-  };
+  }, [bodyAnim, headerAnim]);
 
   // ── Avatar picker ────────────────────────────────────────────────────────────
 
   const handlePickAvatar = useCallback(async () => {
+    const fromGallery = async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setAvatarUri(result.assets[0].uri);
+        setAvatarChanged(true);
+      }
+    };
+    // Web: no camera choice; open the file picker straight away.
+    if (Platform.OS === "web") return fromGallery();
     Alert.alert("Change Photo", "Choose an option", [
       {
         text: "Take Photo",
         onPress: async () => {
           const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ["images"],
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.85,
@@ -146,21 +162,7 @@ export default function EditProfileScreen() {
           }
         },
       },
-      {
-        text: "Choose from Gallery",
-        onPress: async () => {
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.85,
-          });
-          if (!result.canceled && result.assets[0]) {
-            setAvatarUri(result.assets[0].uri);
-            setAvatarChanged(true);
-          }
-        },
-      },
+      { text: "Choose from Gallery", onPress: fromGallery },
       { text: "Cancel", style: "cancel" },
     ]);
   }, []);
@@ -175,7 +177,7 @@ export default function EditProfileScreen() {
     });
   };
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (!firstName.trim()) newErrors.first_name = "First name is required.";
     if (!lastName.trim()) newErrors.last_name = "Last name is required.";
@@ -184,7 +186,7 @@ export default function EditProfileScreen() {
       newErrors.location = "Location must be under 100 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [firstName, lastName, bio, location]);
 
   // ── Save changes ─────────────────────────────────────────────────────────────
 
@@ -197,11 +199,11 @@ export default function EditProfileScreen() {
       if (avatarChanged && avatarUri) {
         setUploadingAvatar(true);
         const formData = new FormData();
-        formData.append("avatar", {
+        await appendImage(formData, "avatar", {
           uri: avatarUri,
           name: "avatar.jpg",
           type: "image/jpeg",
-        } as any);
+        });
         await api.post("/user/avatar", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
@@ -237,7 +239,7 @@ export default function EditProfileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [firstName, lastName, bio, location, avatarUri, avatarChanged]);
+  }, [validate, avatarChanged, avatarUri, firstName, lastName, bio, location]);
 
   // ── Back guard ───────────────────────────────────────────────────────────────
 

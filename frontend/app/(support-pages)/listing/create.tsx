@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -14,8 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
+import { useFeatures } from "@/hooks/useFeatures";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,17 +25,17 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
 import {
   Category,
   CreateItemPayload,
   createItem,
   getCategories,
-  uploadItemImages,
 } from "@/config/items";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,6 +95,21 @@ function SectionCard({ icon, title, subtitle, children }: SectionCardProps) {
 
 export default function CreateListingScreen() {
   const theme = useAuthTheme();
+
+  // First-visit tour (components/guide): title, photos, then the ⓘ.
+  const photosRef = useRef<View>(null);
+  const titleRef = useRef<View>(null);
+  const infoRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      { target: titleRef, text: "Start with the brand and model. It drives your valuation and your matches." },
+      { target: photosRef, text: "Add a few clear photos. The first one is used for the valuation." },
+      { target: infoRef, text: "Tap here anytime for tips on a great listing." },
+    ],
+    [],
+  );
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("create", tourSteps, true, { scrollRef });
   const insets = useSafeAreaInsets();
 
   // Form state
@@ -102,6 +119,10 @@ export default function CreateListingScreen() {
   const [condition, setCondition] = useState<Condition | null>(null);
   const [description, setDescription] = useState("");
   const [desiredTrade, setDesiredTrade] = useState("");
+  // With Qloo on, "what I'm looking for" moves to Review as wants and a
+  // note (UI §13.9), so the field is hidden and not sent.
+  const { qloo, loading: featuresLoading } = useFeatures();
+  const showDesiredTrade = !featuresLoading && !qloo;
   const [location, setLocation] = useState("");
 
   // UI state
@@ -114,8 +135,15 @@ export default function CreateListingScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Entrance animation
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const bodyAnim = useAnimatedValue(0);
+
+  const loadCategories = async () => {
+    try {
+      const data = await getCategories();
+      setCategories(data);
+    } catch {}
+  };
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -132,14 +160,18 @@ export default function CreateListingScreen() {
         friction: 10,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
-  }, []);
+  }, [bodyAnim, headerAnim]);
 
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch {}
+  // ── Validation ───────────────────────────────────────────────────────────────
+
+  const clearError = (field: string) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   // ── Image picking ────────────────────────────────────────────────────────────
@@ -150,7 +182,7 @@ export default function CreateListingScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
       quality: 0.85,
       selectionLimit: 6 - images.length,
@@ -170,17 +202,7 @@ export default function CreateListingScreen() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // ── Validation ───────────────────────────────────────────────────────────────
-
-  const clearError = (field: string) => {
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[field];
-      return next;
-    });
-  };
-
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (images.length < 1) newErrors.images = "Please add at least 1 photo.";
     if (!title.trim()) newErrors.title = "Title is required.";
@@ -193,7 +215,7 @@ export default function CreateListingScreen() {
       newErrors.description = "Description must be at least 20 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [images, title, selectedCategory, condition, description]);
 
   // ── Submit ───────────────────────────────────────────────────────────────────
 
@@ -207,13 +229,16 @@ export default function CreateListingScreen() {
         description: description.trim(),
         category_id: selectedCategory!,
         condition: condition!,
-        desired_trade: desiredTrade.trim() || undefined,
+        desired_trade: showDesiredTrade
+          ? desiredTrade.trim() || undefined
+          : undefined,
         location: location.trim() || undefined,
       };
-      const created = await createItem(payload);
+      const created = await createItem(payload, images);
 
+      // const created = await createItem(payload);
       // Step 2: Upload images
-      await uploadItemImages(created.id, images);
+      // await uploadItemImages(created.id, images);
 
       // Step 3: Navigate to Review screen with item ID
       router.replace({
@@ -251,11 +276,13 @@ export default function CreateListingScreen() {
       setLoading(false);
     }
   }, [
+    validate,
     title,
     description,
     selectedCategory,
     condition,
     desiredTrade,
+    showDesiredTrade,
     location,
     images,
   ]);
@@ -340,7 +367,11 @@ export default function CreateListingScreen() {
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           Create Listing
         </Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          <View ref={infoRef} collapsable={false}>
+            <InfoButton topic="listing" />
+          </View>
+        </View>
       </Animated.View>
 
       {/* ── Body ── */}
@@ -361,6 +392,9 @@ export default function CreateListingScreen() {
         ]}
       >
         <ScrollView
+          ref={scrollRef}
+          onScroll={tour.onScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
@@ -385,6 +419,7 @@ export default function CreateListingScreen() {
               </Text>
             </Text>
 
+            <View ref={photosRef} collapsable={false}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -447,6 +482,7 @@ export default function CreateListingScreen() {
                 </View>
               ))}
             </ScrollView>
+            </View>
 
             {errors.images && (
               <Text style={styles.errorText}>{errors.images}</Text>
@@ -502,6 +538,7 @@ export default function CreateListingScreen() {
             <Text style={[styles.fieldLabel, { color: theme.textPrimary }]}>
               Title <Text style={{ color: Colors.danger }}>*</Text>
             </Text>
+            <View ref={titleRef} collapsable={false}>
             <TextInput
               style={[
                 styles.input,
@@ -528,6 +565,7 @@ export default function CreateListingScreen() {
               onBlur={() => setTitleFocused(false)}
               maxLength={255}
             />
+            </View>
             {errors.title && (
               <Text style={styles.errorText}>{errors.title}</Text>
             )}
@@ -685,62 +723,66 @@ export default function CreateListingScreen() {
               <Text style={styles.errorText}>{errors.description}</Text>
             )}
 
-            {/* What I'm looking for */}
-            <Text
-              style={[
-                styles.fieldLabel,
-                { color: theme.textPrimary, marginTop: Spacing[4] },
-              ]}
-            >
-              What I{"'"}m looking for
-            </Text>
-            <TextInput
-              style={[
-                styles.textarea,
-                {
-                  backgroundColor: tradeFocused
-                    ? theme.inputBgFocused
-                    : theme.inputBg,
-                  borderColor: tradeFocused
-                    ? theme.borderFocus
-                    : theme.borderDefault,
-                  color: theme.textPrimary,
-                },
-              ]}
-              placeholder="What would you like to trade for? Be specific or keep it open..."
-              placeholderTextColor={theme.textPlaceholder}
-              value={desiredTrade}
-              onChangeText={setDesiredTrade}
-              onFocus={() => setTradeFocused(true)}
-              onBlur={() => setTradeFocused(false)}
-              multiline
-              maxLength={500}
-              textAlignVertical="top"
-            />
-            <Text style={[styles.charCount, { color: theme.textMuted }]}>
-              {desiredTrade.length}/500 characters
-            </Text>
+            {showDesiredTrade && (
+              <>
+                {/* What I'm looking for */}
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.textPrimary, marginTop: Spacing[4] },
+                  ]}
+                >
+                  What I{"'"}m looking for
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textarea,
+                    {
+                      backgroundColor: tradeFocused
+                        ? theme.inputBgFocused
+                        : theme.inputBg,
+                      borderColor: tradeFocused
+                        ? theme.borderFocus
+                        : theme.borderDefault,
+                      color: theme.textPrimary,
+                    },
+                  ]}
+                  placeholder="What would you like to trade for? Be specific or keep it open..."
+                  placeholderTextColor={theme.textPlaceholder}
+                  value={desiredTrade}
+                  onChangeText={setDesiredTrade}
+                  onFocus={() => setTradeFocused(true)}
+                  onBlur={() => setTradeFocused(false)}
+                  multiline
+                  maxLength={500}
+                  textAlignVertical="top"
+                />
+                <Text style={[styles.charCount, { color: theme.textMuted }]}>
+                  {desiredTrade.length}/500 characters
+                </Text>
 
-            {/* Pro tip */}
-            <View
-              style={[
-                styles.proTip,
-                {
-                  backgroundColor: Colors.aiSurface,
-                  borderColor: Colors.aiLight,
-                },
-              ]}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={14}
-                color={Colors.ai}
-              />
-              <Text style={[styles.proTipText, { color: Colors.ai }]}>
-                Pro tip: Being specific about what you want increases your match
-                quality
-              </Text>
-            </View>
+                {/* Pro tip */}
+                <View
+                  style={[
+                    styles.proTip,
+                    {
+                      backgroundColor: theme.aiSurface,
+                      borderColor: theme.aiLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={14}
+                    color={theme.ai}
+                  />
+                  <Text style={[styles.proTipText, { color: theme.ai }]}>
+                    Pro tip: Being specific about what you want increases your match
+                    quality
+                  </Text>
+                </View>
+              </>
+            )}
           </SectionCard>
 
           {/* ── Location ── */}
@@ -832,6 +874,7 @@ export default function CreateListingScreen() {
           )}
         </TouchableOpacity>
       </View>
+      {tour.node}
     </KeyboardAvoidingView>
   );
 }
@@ -858,7 +901,7 @@ const styles = StyleSheet.create({
   },
   backText: { ...Typography.body },
   headerTitle: { ...Typography.sectionTitle },
-  headerRight: { minWidth: 60 },
+  headerRight: { minWidth: 60, alignItems: "flex-end" },
 
   // Body
   bodyWrapper: { flex: 1 },

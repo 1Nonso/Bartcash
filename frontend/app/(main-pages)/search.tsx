@@ -18,6 +18,7 @@ import {
   FlatList,
   Image,
   Keyboard,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -26,10 +27,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
+import { router, useFocusEffect } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
 import {
   Colors,
   Layout,
@@ -45,46 +48,12 @@ import {
   getCategories,
   getMarketplaceItems,
 } from "@/config/items";
+import { formatValuation, conditionLabel, timeAgo } from "@/constants/listing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 type Condition = "new" | "good" | "fair" | "poor";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatValuation(item: MarketplaceItem): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `₦${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `₦${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return `${Math.floor(diff / 2592000)}mo ago`;
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
 interface SearchResultCardProps {
   item: MarketplaceItem;
   onPress: () => void;
@@ -92,7 +61,7 @@ interface SearchResultCardProps {
 
 function SearchResultCard({ item, onPress }: SearchResultCardProps) {
   const theme = useAuthTheme();
-  const val = formatValuation(item);
+  const val = formatValuation(item.valuation);
   const ownerName = `${item.owner.first_name} ${item.owner.last_name}`;
   const ownerInitials =
     `${item.owner.first_name[0] ?? ""}${item.owner.last_name[0] ?? ""}`.toUpperCase();
@@ -154,7 +123,7 @@ function SearchResultCard({ item, onPress }: SearchResultCardProps) {
             <Ionicons name="trending-up" size={11} color={Colors.ai} />
             <Text style={styles.valuationText}>{val}</Text>
             <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-              · AI Value
+              · Valuation
             </Text>
           </View>
         )}
@@ -261,9 +230,20 @@ function FilterChip({ label, selected, onPress }: FilterChipProps) {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-export default function SearchScreen() {
+/**
+ * mode "discover" (UI spec §13.5, flag on): the same screen as the Discover
+ * tab — shows the full listing feed when there is no query or filter, no
+ * auto-focus, pull to refresh. Search itself is unchanged.
+ */
+export default function SearchScreen({
+  mode = "search",
+}: {
+  mode?: "search" | "discover";
+}) {
+  const discover = mode === "discover";
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
   const inputRef = useRef<TextInput>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -284,8 +264,8 @@ export default function SearchScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Entrance animation
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const bodyAnim = useAnimatedValue(0);
 
   const CONDITIONS: { label: string; value: Condition }[] = [
     { label: "New", value: "new" },
@@ -293,6 +273,22 @@ export default function SearchScreen() {
     { label: "Fair", value: "fair" },
     { label: "Poor", value: "poor" },
   ];
+
+  // Auto-focus input (not on Discover, where the feed comes first)
+  useFocusEffect(
+    useCallback(() => {
+      if (discover) return;
+      const t = setTimeout(() => inputRef.current?.focus(), 200);
+      return () => clearTimeout(t);
+    }, [discover]),
+  );
+
+  const loadCategories = async () => {
+    try {
+      const data = await getCategories();
+      setCategories(data);
+    } catch {}
+  };
 
   useEffect(() => {
     Animated.stagger(80, [
@@ -310,22 +306,13 @@ export default function SearchScreen() {
       }),
     ]).start();
 
-    // Auto-focus input
-    setTimeout(() => inputRef.current?.focus(), 200);
-
-    // Load categories
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch {}
-  };
+  }, [bodyAnim, headerAnim]);
 
   // ── Search logic ─────────────────────────────────────────────────────────────
 
+  const requestId = useRef(0);
   const performSearch = useCallback(
     async (
       q: string,
@@ -333,9 +320,11 @@ export default function SearchScreen() {
       cond: Condition | null,
       cursor?: string,
     ) => {
-      if (!q.trim() && !catId && !cond) {
+      const myId = ++requestId.current;
+      if (!discover && !q.trim() && !catId && !cond) {
         setResults([]);
         setHasSearched(false);
+        setLoading(false);
         return;
       }
 
@@ -350,7 +339,7 @@ export default function SearchScreen() {
         if (cursor) params.cursor = cursor;
 
         const data = await getMarketplaceItems(params);
-
+        if (myId !== requestId.current) return;
         if (cursor) {
           setResults((prev) => [...prev, ...data.items]);
         } else {
@@ -359,15 +348,33 @@ export default function SearchScreen() {
         setNextCursor(data.next_cursor);
         setHasSearched(true);
         setError(null);
-      } catch (err: any) {
-        setError("Search failed. Please try again.");
+      } catch {
+        if (myId !== requestId.current) return;
+        setError(
+          discover ? "Failed to load listings." : "Search failed. Please try again.",
+        );
+        setHasSearched(true);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (myId === requestId.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [],
+    [discover],
   );
+
+  // Discover: load the feed on mount; pull to refresh reloads the current view.
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
+    if (discover) performSearch("", null, null);
+  }, [discover, performSearch]);
+  const handlePullRefresh = useCallback(async () => {
+    setPullRefreshing(true);
+    await performSearch(query, selectedCategory, selectedCondition);
+    setPullRefreshing(false);
+  }, [performSearch, query, selectedCategory, selectedCondition]);
 
   // Debounced search on query change
   const handleQueryChange = useCallback(
@@ -384,6 +391,9 @@ export default function SearchScreen() {
   // Re-search when filters change
   const handleCategorySelect = useCallback(
     (catId: string | null) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
       setSelectedCategory(catId);
       performSearch(query, catId, selectedCondition);
     },
@@ -392,6 +402,9 @@ export default function SearchScreen() {
 
   const handleConditionSelect = useCallback(
     (cond: Condition | null) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
       setSelectedCondition(cond);
       performSearch(query, selectedCategory, cond);
     },
@@ -399,13 +412,20 @@ export default function SearchScreen() {
   );
 
   const handleClearAll = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
     setQuery("");
     setSelectedCategory(null);
     setSelectedCondition(null);
+    if (discover) {
+      performSearch("", null, null);
+      return;
+    }
     setResults([]);
     setHasSearched(false);
     inputRef.current?.focus();
-  }, []);
+  }, [discover, performSearch]);
 
   const handleLoadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -455,7 +475,9 @@ export default function SearchScreen() {
       <View style={styles.emptyState}>
         <Ionicons name="search-outline" size={48} color={Colors.gray[300]} />
         <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-          No results found
+          {discover && !query.trim() && activeFiltersCount === 0
+            ? "No listings yet"
+            : "No results found"}
         </Text>
         <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
           Try different keywords or adjust your filters
@@ -467,7 +489,16 @@ export default function SearchScreen() {
         )}
       </View>
     );
-  }, [loading, hasSearched, activeFiltersCount, theme]);
+  }, [
+    loading,
+    hasSearched,
+    discover,
+    query,
+    theme.textPrimary,
+    theme.textMuted,
+    activeFiltersCount,
+    handleClearAll,
+  ]);
 
   // ── Main render ───────────────────────────────────────────────────────────────
 
@@ -499,6 +530,11 @@ export default function SearchScreen() {
           },
         ]}
       >
+        {discover && (
+          <Text style={[styles.discoverTitle, { color: theme.textPrimary }]}>
+            Discover
+          </Text>
+        )}
         <View style={styles.searchRow}>
           {/* Input */}
           <View
@@ -546,16 +582,18 @@ export default function SearchScreen() {
             )}
           </View>
 
-          {/* Cancel */}
-          <TouchableOpacity
-            onPress={() => goBack()}
-            style={styles.cancelBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.cancelText, { color: theme.textPrimary }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
+          {/* Cancel (not on Discover, which is a tab) */}
+          {!discover && (
+            <TouchableOpacity
+              onPress={() => goBack()}
+              style={styles.cancelBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelText, { color: theme.textPrimary }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
 
@@ -693,10 +731,19 @@ export default function SearchScreen() {
             ListFooterComponent={renderFooter()}
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.4}
-            contentContainerStyle={styles.flatListContent}
+            contentContainerStyle={[styles.flatListContent, { paddingBottom: tabSpace }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
+            refreshControl={
+              discover ? (
+                <RefreshControl
+                  refreshing={pullRefreshing}
+                  onRefresh={handlePullRefresh}
+                  tintColor={theme.ai}
+                />
+              ) : undefined
+            }
           />
         )}
       </Animated.View>
@@ -708,6 +755,11 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  discoverTitle: {
+    ...Typography.pageTitle,
+    marginBottom: Spacing[3],
+  },
 
   // Search header
   searchHeader: {
@@ -776,7 +828,6 @@ const styles = StyleSheet.create({
   flatListContent: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing[3],
-    paddingBottom: Layout.tabBarHeight + Spacing[4],
     gap: Spacing[3],
   },
 

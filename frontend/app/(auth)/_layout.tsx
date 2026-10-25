@@ -12,7 +12,8 @@ import { Colors } from "@/constants/colors";
  *  - sign-in           → Sign In
  *  - sign-up           → Sign Up
  *  - forgot-password   → Forgot Password
- *  - otp-verification  → OTP (email & phone)
+ *  - verify-email      → Ask for a new verification code (unverified account)
+ *  - otp-verification  → OTP (email)
  *  - reset-password    → Reset Password
  */
 
@@ -27,9 +28,10 @@ export default function AuthLayout() {
       {/*
         style="auto" lets the OS decide icon color based on bg.
         On a light bg → dark icons. On a dark bg → light icons.
-        This is the correct way to handle theme-responsive status bars.
+        SDK 57 is edge-to-edge, so the bar has no background of its own; the
+        root View's background shows through.
       */}
-      <StatusBar style="auto" backgroundColor={bg} translucent={false} />
+      <StatusBar style="auto" />
 
       <Stack
         screenOptions={{
@@ -55,6 +57,10 @@ export default function AuthLayout() {
         />
         <Stack.Screen
           name="forgot-password"
+          options={{ animation: "slide_from_bottom", gestureEnabled: true }}
+        />
+        <Stack.Screen
+          name="verify-email"
           options={{ animation: "slide_from_bottom", gestureEnabled: true }}
         />
         <Stack.Screen

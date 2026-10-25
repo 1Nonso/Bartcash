@@ -1,4 +1,5 @@
 import api from "./api";
+import { appendImage } from "./upload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,48 @@ export interface GetItemsParams {
   value_max?: number;
 }
 
+/** GET /items/mine?include=match_summary (available items, flag on). */
+export interface MatchSummary {
+  count: number;
+  top_label: ScoreLabelValue | null;
+  status: "ready" | "refreshing";
+}
+
+export type ScoreLabelValue = "strong" | "good" | "possible";
+
+export interface MyItem {
+  id: string;
+  title: string;
+  condition: "new" | "good" | "fair" | "poor";
+  status: "all" | "available" | "in_trade" | "traded" | "inactive";
+  is_service: boolean;
+  location: string | null;
+  primary_image: any | null;
+  valuation: ItemValuation | null;
+  /** Ranked category picks (flag on). */
+  wants?: { category_id: string; name: string; rank: number }[];
+  match_summary?: MatchSummary | null;
+  created_at: string;
+}
+
+// ─── Match context (API §16.3), on GET /items/{id}?context_item_id= ─────────
+
+export type CheckResult = "strong" | "partial" | "none" | "unknown";
+
+export interface MatchContext {
+  score_label: ScoreLabelValue | null;
+  reason: string;
+  checked: {
+    key: "wants_fit" | "taste_fit" | "reciprocal_fit" | "shared_interests";
+    label: string;
+    result: CheckResult;
+  }[];
+  /** Interests both owners have on their taste profiles (at most 6). */
+  shared_interests: { qloo_entity_id: string; name: string; entity_type: string; image_url: string | null }[];
+  shared_tags: { tag_id: string; name: string }[];
+  source: "qloo" | "fallback";
+}
+
 // ─── Image types ──────────────────────────────────────────────────────────────
 
 export interface ItemImage {
@@ -95,6 +138,9 @@ export interface ItemDetail {
   images: ItemImage[];
   valuation: ItemValuationDetail | null;
   owner: ItemOwnerDetail;
+  /** Flag on only: ranked wants and, with a context listing, why it matches. */
+  wants?: { rank: number; category: Category }[];
+  match_context?: MatchContext | null;
   created_at: string;
 }
 
@@ -146,8 +192,13 @@ export async function getMarketplaceItems(
  * Fetch full detail for a single item.
  * GET /items/{id}
  */
-export async function getItemById(id: string): Promise<ItemDetail> {
-  const response = await api.get(`/items/${id}`);
+export async function getItemById(
+  id: string,
+  contextItemId?: string,
+): Promise<ItemDetail> {
+  const response = await api.get(`/items/${id}`, {
+    params: contextItemId ? { context_item_id: contextItemId } : undefined,
+  });
   return response.data.data.item;
 }
 
@@ -170,14 +221,43 @@ export async function getMyItems(
  * Create a new item listing.
  * POST /items
  */
-export async function createItem(payload: CreateItemPayload): Promise<{
-  id: string;
-  title: string;
-  status: string;
-  valuation_status: string;
-}> {
-  const response = await api.post("/items", payload);
-  return response.data.data.item;
+// export async function createItem(payload: CreateItemPayload): Promise<{
+//   id: string;
+//   title: string;
+//   status: string;
+//   valuation_status: string;
+// }> {
+//   const response = await api.post("/items", payload);
+//   return response.data.data.item;
+// }
+
+export async function createItem(
+  payload: CreateItemPayload,
+  images: { uri: string; name: string; type: string }[],
+) {
+  const form = new FormData();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (v !== undefined) form.append(k, String(v));
+  });
+  for (const img of images) await appendImage(form, "images", img);
+  const res = await api.post("/items", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 60000,
+  });
+  return res.data.data.item as {
+    id: string;
+    title: string;
+    status: string;
+    valuation_status: string;
+  };
+}
+
+export async function publishItem(id: string, user_declared_value: number) {
+  const res = await api.patch(`/items/${id}/publish`, { user_declared_value });
+  return {
+    item: res.data.data.item,
+    warnings: res.data.warnings as Record<string, string> | undefined,
+  };
 }
 
 /**
@@ -189,17 +269,36 @@ export async function uploadItemImages(
   images: { uri: string; name: string; type: string }[],
 ): Promise<{ images: ItemImage[]; valuation_status: string }> {
   const formData = new FormData();
-  images.forEach((img) => {
-    formData.append("images", {
-      uri: img.uri,
-      name: img.name,
-      type: img.type,
-    } as any);
-  });
+  for (const img of images) await appendImage(formData, "images", img);
   const response = await api.post(`/items/${itemId}/images`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 30000,
   });
+  return response.data.data;
+}
+
+/** Result of a photo change on Edit Listing. */
+export interface ImagesChange {
+  images: ItemImage[];
+  /** "pending" when the valuation was re-run (the cover changed). */
+  valuation_status: string | null;
+}
+
+/**
+ * Remove a photo (never the last one; the next becomes the cover if needed).
+ * DELETE /items/{id}/images/{imageId}
+ */
+export async function removeItemImage(itemId: string, imageId: string): Promise<ImagesChange> {
+  const response = await api.delete(`/items/${itemId}/images/${imageId}`);
+  return response.data.data;
+}
+
+/**
+ * Make a photo the cover; the valuation re-runs.
+ * PATCH /items/{id}/images/{imageId}/primary
+ */
+export async function setItemCover(itemId: string, imageId: string): Promise<ImagesChange> {
+  const response = await api.patch(`/items/${itemId}/images/${imageId}/primary`);
   return response.data.data;
 }
 

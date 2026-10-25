@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StatusBar,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -232,7 +232,7 @@ export default function ReBargainScreen() {
           {isCash ? (
             <Text style={[styles.currentValue, { color: theme.textMuted }]}>
               {offer.cash_amount
-                ? `₦${Number(offer.cash_amount).toLocaleString()}`
+                ? `$${Number(offer.cash_amount).toLocaleString()}`
                 : "—"}
             </Text>
           ) : (
@@ -263,7 +263,7 @@ export default function ReBargainScreen() {
                     { color: theme.textMuted, fontSize: 14 },
                   ]}
                 >
-                  + ₦{Number(offer.top_up_amount).toLocaleString()} top-up
+                  + ${Number(offer.top_up_amount).toLocaleString()} top-up
                 </Text>
               )}
             </>
@@ -272,11 +272,11 @@ export default function ReBargainScreen() {
 
         {theirItemValue !== null && (
           <View
-            style={[styles.aiReference, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.aiReference, { backgroundColor: theme.aiSurface }]}
           >
-            <Ionicons name="sparkles" size={14} color={Colors.ai} />
-            <Text style={[styles.aiReferenceText, { color: Colors.ai }]}>
-              Their item's AI value: ₦{theirItemValue.toLocaleString()}
+            <Ionicons name="sparkles" size={14} color={theme.ai} />
+            <Text style={[styles.aiReferenceText, { color: theme.ai }]}>
+              Their item&apos;s valuation: ${theirItemValue.toLocaleString()}
             </Text>
           </View>
         )}
@@ -296,7 +296,7 @@ export default function ReBargainScreen() {
                   color: theme.textPrimary,
                 },
               ]}
-              placeholder="Enter amount (₦)"
+              placeholder="Enter amount ($)"
               placeholderTextColor={theme.textPlaceholder}
               value={cashAmount}
               onChangeText={setCashAmount}
@@ -391,7 +391,7 @@ export default function ReBargainScreen() {
                   color: theme.textPrimary,
                 },
               ]}
-              placeholder="₦0"
+              placeholder="$0"
               placeholderTextColor={theme.textPlaceholder}
               value={topUp}
               onChangeText={setTopUp}
@@ -424,8 +424,8 @@ export default function ReBargainScreen() {
                 { color: valueDiff >= 0 ? Colors.success : Colors.warning },
               ]}
             >
-              Your offer is ₦{Math.abs(valueDiff).toLocaleString()}{" "}
-              {valueDiff >= 0 ? "above" : "below"} their item's value
+              Your offer is ${Math.abs(valueDiff).toLocaleString()}{" "}
+              {valueDiff >= 0 ? "above" : "below"} their item&apos;s value
             </Text>
           </View>
         )}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   Animated,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -20,6 +23,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPasswordScreen() {
   const theme = useAuthTheme();
+  const insets = useSafeAreaInsets();
 
   // Receives error message if redirected back from reset-password with invalid/expired token
   const { error: tokenError } = useLocalSearchParams<{ error?: string }>();
@@ -30,53 +34,52 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState(tokenError ?? "");
   const [successMsg, setSuccessMsg] = useState("");
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const headerTranslate = useRef(new Animated.Value(-20)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const cardTranslate = useRef(new Animated.Value(30)).current;
-  const bottomAnim = useRef(new Animated.Value(0)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const headerAnim = useAnimatedValue(0);
+  const headerTranslate = useAnimatedValue(-20);
+  const cardAnim = useAnimatedValue(0);
+  const cardTranslate = useAnimatedValue(30);
+  const bottomAnim = useAnimatedValue(0);
+  const buttonScale = useAnimatedValue(1);
 
-  useRef(
-    (() => {
-      Animated.stagger(80, [
-        Animated.parallel([
-          Animated.spring(headerAnim, {
-            toValue: 1,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-          Animated.spring(headerTranslate, {
-            toValue: 0,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.spring(cardAnim, {
-            toValue: 1,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-          Animated.spring(cardTranslate, {
-            toValue: 0,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.spring(bottomAnim, {
+  // Entrance animation, once on mount (it used to restart on every render).
+  useEffect(() => {
+    Animated.stagger(80, [
+      Animated.parallel([
+        Animated.spring(headerAnim, {
           toValue: 1,
-          tension: 60,
-          friction: 12,
+          tension: 70,
+          friction: 10,
           useNativeDriver: true,
         }),
-      ]).start();
-    })(),
-  ).current;
+        Animated.spring(headerTranslate, {
+          toValue: 0,
+          tension: 70,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(cardAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardTranslate, {
+          toValue: 0,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.spring(bottomAnim, {
+        toValue: 1,
+        tension: 60,
+        friction: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomAnim, cardAnim, cardTranslate, headerAnim, headerTranslate]);
 
   const isValid = EMAIL_REGEX.test(email);
   const emailInvalid = email.length > 0 && !isValid;
@@ -123,7 +126,10 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.bg }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: theme.bg, paddingTop: insets.top + Spacing[3] }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <StatusBar style={theme.statusBarStyle} />
 
       <TouchableOpacity
@@ -278,12 +284,12 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
         </Animated.View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingTop: Platform.OS === "ios" ? 56 : 40 },
+  root: { flex: 1 },
   backBtn: {
     paddingHorizontal: Spacing[6],
     paddingVertical: Spacing[2],

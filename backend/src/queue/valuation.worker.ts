@@ -3,6 +3,7 @@ import { boss } from '../config/queue.config';
 import { QUEUES } from './queue.names';
 import { runItemValuation } from '../services/valuation.service';
 import type { ItemValuationJobData } from './itemValuation.queue';
+import { valuationFailureCode } from '../utils/valuationFailure';
 
 // Registers the item-valuation consumer on the shared pg-boss instance.
 // Call after startQueue(). Used by both server.ts (in-process, free hosting)
@@ -39,9 +40,12 @@ export async function registerValuationWorker() {
                      data: {
                         status:
                            'failed',
-                        failedReason: (
-                           err as Error
-                        ).message,
+                        // A code, never the raw text (Groq's names the org).
+                        failedReason:
+                           valuationFailureCode(
+                              (err as Error)
+                                 ?.message,
+                           ),
                      },
                   },
                );

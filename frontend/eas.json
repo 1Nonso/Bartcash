@@ -10,7 +10,10 @@
     },
     "preview": {
       "distribution": "internal",
-      "developmentClient": false
+      "developmentClient": false,
+      "android": {
+        "buildType": "apk"
+      }
     },
     "staging": {
       "distribution": "internal",

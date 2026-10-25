@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -45,9 +46,9 @@ function statusConfig(status: TradeStatus): {
   bg: string;
 } {
   switch (status) {
-    case "pending":
+    case "negotiating":
       return {
-        label: "Pending",
+        label: "Negotiating",
         color: Colors.warning,
         bg: Colors.warning + "20",
       };
@@ -82,11 +83,11 @@ function statusConfig(status: TradeStatus): {
   }
 }
 
-type FilterTab = "all" | "pending" | "accepted" | "completed";
+type FilterTab = "all" | "negotiating" | "accepted" | "completed";
 
 const FILTER_TABS: { label: string; value: FilterTab }[] = [
   { label: "All", value: "all" },
-  { label: "Pending", value: "pending" },
+  { label: "Negotiating", value: "negotiating" },
   { label: "Accepted", value: "accepted" },
   { label: "Completed", value: "completed" },
 ];
@@ -152,12 +153,12 @@ function TradeCard({ trade, onPress }: TradeCardProps) {
       </View>
 
       {/* Items preview */}
-      {trade.items_preview && trade.items_preview.length > 0 && (
+      {trade.their_items_preview && trade.their_items_preview.length > 0 && (
         <View
           style={[styles.itemsPreview, { borderTopColor: theme.borderSubtle }]}
         >
           <View style={styles.itemsPreviewImages}>
-            {trade.items_preview.slice(0, 4).map((url, i) => (
+            {trade.their_items_preview.slice(0, 4).map((url, i) => (
               <Image
                 key={i}
                 source={{ uri: url }}
@@ -212,8 +213,8 @@ export default function MyTradesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -230,7 +231,7 @@ export default function MyTradesScreen() {
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
@@ -260,7 +261,7 @@ export default function MyTradesScreen() {
       setLoading(false);
     };
     load();
-  }, [activeTab]);
+  }, [activeTab, fetchTrades]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

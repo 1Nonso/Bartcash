@@ -8,11 +8,33 @@ export const boss = new PgBoss({
 
 let started = false;
 
+boss.on('error', (err) =>
+   console.error('pg-boss error:', err),
+);
+process.on('SIGTERM', async () => {
+   await boss.stop({
+      graceful: true,
+   });
+   process.exit(0);
+});
+
 export async function startQueue(): Promise<PgBoss> {
    if (!started) {
       await boss.start();
       await boss.createQueue(
          QUEUES.ITEM_VALUATION,
+      );
+      await boss.createQueue(
+         QUEUES.ITEM_TASTE,
+         { policy: 'short' },
+      );
+      await boss.createQueue(
+         QUEUES.MATCH_REFRESH,
+         { policy: 'short' },
+      );
+      await boss.createQueue(
+         QUEUES.TASTE_COMPAT,
+         { policy: 'short' },
       );
       started = true;
    }

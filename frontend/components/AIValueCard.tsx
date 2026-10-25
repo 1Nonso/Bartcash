@@ -33,7 +33,13 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from "react-native";
 import { Colors, Typography, Spacing, Radius, Shadows } from "@/constants";
 
 // ─── Single Item AI Value Card ─────────────────────────────────────────────
@@ -141,7 +147,6 @@ export const TradeOfferCard: React.FC<TradeOfferCardProps> = ({
   onReject,
   style,
 }) => {
-  const { TouchableOpacity } = require("react-native");
   return (
     <View style={[styles.offerCard, style]}>
       {/* Header */}
@@ -159,7 +164,7 @@ export const TradeOfferCard: React.FC<TradeOfferCardProps> = ({
           {theyOffer.postedAt}
         </Text>
         <Text style={styles.offerItemValue}>
-          ↗ {theyOffer.aiValue} • AI Value
+          ↗ {theyOffer.aiValue} • Valuation
         </Text>
       </View>
 
@@ -177,7 +182,7 @@ export const TradeOfferCard: React.FC<TradeOfferCardProps> = ({
           {yourOffer.postedAt}
         </Text>
         <Text style={styles.offerItemValue}>
-          ↗ {yourOffer.aiValue} • AI Value
+          ↗ {yourOffer.aiValue} • Valuation
         </Text>
       </View>
 
@@ -214,7 +219,7 @@ export const TradeOfferCard: React.FC<TradeOfferCardProps> = ({
 const AIHeader = () => (
   <View style={styles.aiHeader}>
     <Text style={styles.aiSparkle}>✦</Text>
-    <Text style={styles.aiHeaderText}>AI Estimated Value</Text>
+    <Text style={styles.aiHeaderText}>Automated Valuation Result</Text>
   </View>
 );
 

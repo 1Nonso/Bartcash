@@ -40,6 +40,13 @@ export interface TradeItem {
   id: string;
   title: string;
   primary_image: string | null;
+  // Not sent by the trade endpoints today; shown when present.
+  condition?: string;
+  valuation?: {
+    status: "pending" | "completed" | "failed";
+    value_min: string | null;
+    value_max: string | null;
+  } | null;
 }
 
 export interface TradeMessage {
@@ -81,6 +88,13 @@ export interface Trade {
 export interface TradeListItem {
   id: string;
   status: TradeStatus;
+  trade_type: "cash" | "item";
+  /** The caller's side; offered items, cash and top-ups are the proposer's. */
+  role: "proposer" | "receiver";
+  /** Negotiating trades only. */
+  current_offer: CurrentOffer | null;
+  /** User id whose move it is (negotiating only). */
+  awaiting_response_from: string | null;
   other_party: {
     id: string;
     first_name: string;
@@ -173,7 +187,12 @@ export async function getTrades(
     cursor?: string;
     limit?: number;
   } = {},
-): Promise<{ trades: TradeListItem[]; next_cursor: string | null }> {
+): Promise<{
+  trades: TradeListItem[];
+  next_cursor: string | null;
+  /** Unread messages across all the caller's chats. */
+  unread_total: number;
+}> {
   const response = await api.get("/trades", { params });
   return response.data.data;
 }

@@ -1,16 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Layout, Radius, Spacing, Typography } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import api from "@/config/api";
+import { timeAgo } from "@/constants/listing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,18 +50,6 @@ async function getDisputeById(id: string): Promise<DisputeDetail> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 30)
-    return `${Math.floor(days / 7)} week${Math.floor(days / 7) !== 1 ? "s" : ""} ago`;
-  return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? "s" : ""} ago`;
-}
-
 function statusConfig(status: DisputeDetail["status"]): {
   label: string;
   color: string;
@@ -116,7 +105,7 @@ export default function DisputeDetailScreen() {
   const [dispute, setDispute] = useState<DisputeDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -132,7 +121,7 @@ export default function DisputeDetailScreen() {
           tension: 55,
           friction: 11,
         }).start();
-      } catch (err: any) {
+      } catch {
         Alert.alert("Error", "Failed to load dispute details.");
         goBack();
       } finally {
@@ -140,7 +129,7 @@ export default function DisputeDetailScreen() {
       }
     };
     load();
-  }, [id]);
+  }, [contentAnim, id]);
 
   // ── Loading ──────────────────────────────────────────────────────────────────
 
@@ -385,12 +374,12 @@ export default function DisputeDetailScreen() {
         {/* ── What happens next (only if open/under review) ── */}
         {(dispute.status === "open" || dispute.status === "under_review") && (
           <View
-            style={[styles.infoCard, { backgroundColor: Colors.aiSurface }]}
+            style={[styles.infoCard, { backgroundColor: theme.aiSurface }]}
           >
-            <Text style={[styles.infoTitle, { color: Colors.ai }]}>
+            <Text style={[styles.infoTitle, { color: theme.ai }]}>
               What happens next?
             </Text>
-            <Text style={[styles.infoBody, { color: Colors.ai }]}>
+            <Text style={[styles.infoBody, { color: theme.ai }]}>
               Our team will review this dispute and contact both parties. The
               trade will remain paused until the dispute is resolved or closed.
               Thank you for your patience.

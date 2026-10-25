@@ -1,4 +1,42 @@
+import type { Request } from 'express';
 import { db } from '../config/db.config';
+import {
+   rateLimit,
+   ipKeyGenerator,
+   MINUTE,
+} from 'express-rate-limit';
+
+// One bucket per user (IP when signed out) per route, so limits on
+// different routes don't share a counter.
+function routeKey(req: Request): string {
+   const who =
+      req.userId ??
+      ipKeyGenerator(req.ip ?? '');
+   const route = `${req.method} ${req.baseUrl}${req.route?.path ?? req.path}`;
+   return `${who}|${route}`;
+}
+
+/** Per-user, per-route limiter (D-19). Planned tiers: taste search 30,
+ *  Scout draft-offer 10, everything else 60 per minute. */
+export function userLimiter(
+   limit: number,
+   windowMs = 1 * MINUTE,
+) {
+   return rateLimit({
+      windowMs,
+      limit,
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      keyGenerator: routeKey,
+      message: {
+         success: false,
+         message:
+            'Too many requests. Please try again shortly.',
+      },
+   });
+}
+
+export const limiter = userLimiter(10);
 
 export async function hit(
    key: string,

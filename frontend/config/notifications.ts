@@ -1,8 +1,7 @@
 import api from "./api";
-import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
-import { ExecutionEnvironment } from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { router } from "expo-router";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +35,18 @@ export interface NotificationsResponse {
 export const isExpo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-if (isExpo) {
+type NotificationsModule = typeof import("expo-notifications");
+
+/**
+ * expo-notifications, or null in Expo Go. Android Expo Go (SDK 53+) throws
+ * on import, so the module is loaded only outside Expo Go. Import this
+ * instead of "expo-notifications".
+ */
+export const Notifications: NotificationsModule | null = isExpo
+  ? null
+  : require("expo-notifications");
+
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -49,8 +59,28 @@ if (isExpo) {
 }
 
 // ─── API Functions ────────────────────────────────────────────────────────────
+/** Open the screen a push notification points at (trade or dispute). */
+export function navigateFromNotification(data: any) {
+  const referenceType = data?.reference_type;
+  const referenceId = data?.reference_id;
+  if (!referenceType || !referenceId) return;
+
+  if (referenceType === "Trade") {
+    router.push({
+      pathname: "/(support-pages)/trade/[id]",
+      params: { id: referenceId },
+    });
+  } else if (referenceType === "Dispute") {
+    // TODO: point at the dispute detail screen once dispute.tsx exists
+    router.push({
+      pathname: "/(support-pages)/trade/[id]",
+      params: { id: referenceId },
+    });
+  }
+}
+
 export async function registerForPushNotifications(): Promise<void> {
-  if (isExpo) return;
+  if (!Notifications) return;
   if (!Device.isDevice) return; // simulators/emulators have no push token
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -61,12 +91,13 @@ export async function registerForPushNotifications(): Promise<void> {
   }
   if (status !== "granted") return;
 
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  const { data: token } = await Notifications.getExpoPushTokenAsync({
-    projectId,
-  });
-
   try {
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
     await api.patch("/user/push-token", { push_token: token });
   } catch (err) {
     console.error("Failed to register push token:", err);
@@ -85,6 +116,11 @@ export async function getNotifications(
 ): Promise<NotificationsResponse> {
   const response = await api.get("/notifications", { params });
   return response.data.data;
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const res = await api.get("/notifications", { params: { limit: 1 } });
+  return res.data.data.unread_count ?? 0;
 }
 
 /**

@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
-  FlatList,
   Image,
   ScrollView,
   StatusBar,
@@ -12,20 +10,25 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarSpace } from "@/hooks/useTabBarSpace";
+import { useFeatures } from "@/hooks/useFeatures";
+import { showToast } from "@/hooks/toast";
+import { resetGuides } from "@/components/guide/storage";
 import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
 import { useAuthTheme } from "@/constants/useAuthTheme";
-import { logout, getStoredUser } from "@/config/auth";
+import { logout } from "@/config/auth";
 import api from "@/config/api";
+import { formatValuation } from "@/constants/listing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +43,8 @@ interface UserProfile {
   averageRating: string;
   totalTrades: number;
   createdAt: string;
+  /** Flag on: interests on the taste profile. */
+  taste?: { entityCount: number; isActive: boolean };
 }
 
 interface Rating {
@@ -63,7 +68,7 @@ interface MyListing {
   valuation: {
     value_min: string | null;
     value_max: string | null;
-    status: string;
+    status: "pending" | "completed" | "failed";
   } | null;
 }
 
@@ -74,11 +79,16 @@ async function fetchProfile(): Promise<UserProfile> {
   return response.data.data.user;
 }
 
-async function fetchMyListings(): Promise<MyListing[]> {
+/** Up to 6 available listings for the strip, plus the total count. */
+async function fetchMyListings(): Promise<{
+  items: MyListing[];
+  total: number;
+}> {
   const response = await api.get("/items/mine", {
     params: { status: "available", limit: 6 },
   });
-  return response.data.data.items;
+  const { items, total } = response.data.data;
+  return { items, total: total ?? items.length };
 }
 
 async function fetchMyRatings(userId: string): Promise<{
@@ -103,23 +113,12 @@ function memberSince(dateStr: string): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-function formatValuation(item: MyListing): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
-    return null;
-  return `$${Number(v.value_min).toLocaleString()} – $${Number(v.value_max).toLocaleString()}`;
-}
-
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
+// function formatValuation(item: MyListing): string | null {
+//   const v = item.valuation;
+//   if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
+//     return null;
+//   return `$${Number(v.value_min).toLocaleString()} – $${Number(v.value_max).toLocaleString()}`;
+// }
 // ─── Star rating component ────────────────────────────────────────────────────
 
 function StarRating({ score }: { score: number }) {
@@ -141,18 +140,20 @@ function StarRating({ score }: { score: number }) {
 
 export default function ProfileScreen() {
   const theme = useAuthTheme();
-  const insets = useSafeAreaInsets();
+  const tabSpace = useTabBarSpace();
+  const { qloo } = useFeatures();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [listings, setListings] = useState<MyListing[]>([]);
+  const [listingsTotal, setListingsTotal] = useState(0);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [totalRatings, setTotalRatings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -171,27 +172,34 @@ export default function ProfileScreen() {
         friction: 10,
       }),
     ]).start();
+  }, [contentAnim, headerAnim]);
 
-    const load = async () => {
-      try {
-        const profileData = await fetchProfile();
-        setProfile(profileData);
+  // Reload on every focus: the tab stays mounted, so counts would go stale
+  // after publishing or completing a trade.
+  useFocusEffect(
+    useCallback(() => {
+      const load = async () => {
+        try {
+          const profileData = await fetchProfile();
+          setProfile(profileData);
 
-        const [listingsData, ratingsData] = await Promise.all([
-          fetchMyListings(),
-          fetchMyRatings(profileData.id),
-        ]);
-        setListings(listingsData);
-        setRatings(ratingsData.ratings);
-        setTotalRatings(ratingsData.total_ratings);
-      } catch {
-        // Non-blocking — profile loaded, sections may be empty
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+          const [listingsData, ratingsData] = await Promise.all([
+            fetchMyListings(),
+            fetchMyRatings(profileData.id),
+          ]);
+          setListings(listingsData.items);
+          setListingsTotal(listingsData.total);
+          setRatings(ratingsData.ratings);
+          setTotalRatings(ratingsData.total_ratings);
+        } catch {
+          // Non-blocking — profile loaded, sections may be empty
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
+    }, []),
+  );
 
   // ── Logout ───────────────────────────────────────────────────────────────────
 
@@ -280,7 +288,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + Layout.tabBarHeight + Spacing[6] },
+          { paddingBottom: tabSpace + Spacing[2] },
           { paddingTop: 60 },
         ]}
       >
@@ -355,7 +363,7 @@ export default function ProfileScreen() {
             style={[styles.statsRow, { borderTopColor: theme.borderSubtle }]}
           >
             {[
-              { label: "Listings", value: listings.length.toString() },
+              { label: "Listings", value: listingsTotal.toString() },
               { label: "Trades", value: profile.totalTrades.toString() },
               { label: "Reviews", value: totalRatings.toString() },
             ].map((stat, i) => (
@@ -418,7 +426,7 @@ export default function ProfileScreen() {
               {
                 icon: "cube-outline",
                 label: "My Listings",
-                count: listings.length,
+                count: listingsTotal,
                 onPress: () =>
                   router.push("/(support-pages)/listing/my-listings"),
               },
@@ -432,7 +440,28 @@ export default function ProfileScreen() {
                 icon: "notifications-outline",
                 label: "Notifications",
                 count: null,
-                // onPress: () => router.push("/(support-pages)/notifications"),
+                onPress: () => router.push("/(support-pages)/notification"),
+              },
+              // Taste profile (UI §13.6), flag on only.
+              ...(qloo
+                ? [
+                    {
+                      icon: "sparkles-outline",
+                      label: "Taste profile",
+                      count: profile?.taste?.entityCount ?? null,
+                      onPress: () => router.push("/(support-pages)/taste"),
+                    },
+                  ]
+                : []),
+              {
+                icon: "help-circle-outline",
+                label: "Replay tips",
+                count: null,
+                onPress: () => {
+                  resetGuides().then(() =>
+                    showToast("success", "Tips will show again as you go."),
+                  );
+                },
               },
             ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
@@ -444,7 +473,7 @@ export default function ProfileScreen() {
                   <View
                     style={[
                       styles.menuIconWrap,
-                      { backgroundColor: Colors.gray[100] },
+                      { backgroundColor: theme.surfaceVariant },
                     ]}
                   >
                     <Ionicons
@@ -518,7 +547,7 @@ export default function ProfileScreen() {
                 contentContainerStyle={styles.listingsStrip}
               >
                 {listings.map((item) => {
-                  const val = formatValuation(item);
+                  const val = formatValuation(item.valuation);
                   return (
                     <TouchableOpacity
                       key={item.id}
@@ -548,7 +577,7 @@ export default function ProfileScreen() {
                           style={[
                             styles.listingImage,
                             styles.listingImagePlaceholder,
-                            { backgroundColor: Colors.gray[100] },
+                            { backgroundColor: theme.surfaceVariant },
                           ]}
                         >
                           <Ionicons
@@ -697,7 +726,7 @@ export default function ProfileScreen() {
               <View
                 style={[
                   styles.menuIconWrap,
-                  { backgroundColor: Colors.gray[100] },
+                  { backgroundColor: theme.surfaceVariant },
                 ]}
               >
                 <Ionicons

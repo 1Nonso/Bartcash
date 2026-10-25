@@ -9,12 +9,12 @@
  *   GET /users/{id}/ratings
  *   GET /items?user_id={id}&status=available  (marketplace filter)
  *   GET /user/profile                          (to get own ID for redirect check)
+ *   GET /users/{id}/taste-compatibility        (flag on; components/CommonTaste)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   ScrollView,
@@ -24,6 +24,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -40,6 +42,8 @@ import { useAuthTheme } from "@/constants/useAuthTheme";
 import api from "@/config/api";
 import { getUserRatings, Rating } from "@/config/ratings";
 import { MarketplaceItem } from "@/config/items";
+import { timeAgo, formatValuation } from "@/constants/listing";
+import { CommonTaste } from "@/components/CommonTaste";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,35 +60,12 @@ interface PublicUser {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function formatMemberSince(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return `${Math.floor(diff / 2592000)}mo ago`;
-}
-
-function formatValuation(item: MarketplaceItem): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed") return null;
-  if (!v.value_min && !v.value_max) return null;
-  const min = v.value_min ? `₦${Number(v.value_min).toLocaleString()}` : "";
-  const max = v.value_max ? `₦${Number(v.value_max).toLocaleString()}` : "";
-  if (min && max) return `${min} – ${max}`;
-  return min || max;
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
 function StarRating({ score }: { score: number }) {
   return (
     <View style={{ flexDirection: "row", gap: 2 }}>
@@ -102,7 +83,7 @@ function StarRating({ score }: { score: number }) {
 
 function ListingMiniCard({ item }: { item: MarketplaceItem }) {
   const theme = useAuthTheme();
-  const val = formatValuation(item);
+  const val = formatValuation(item.valuation);
   return (
     <TouchableOpacity
       style={[styles.miniCard, { backgroundColor: theme.surface }]}
@@ -212,8 +193,8 @@ export default function ViewUserProfileScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Entrance animations
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const contentAnim = useAnimatedValue(0);
 
   useEffect(() => {
     Animated.stagger(120, [
@@ -230,9 +211,7 @@ export default function ViewUserProfileScreen() {
         friction: 10,
       }),
     ]).start();
-
-    fetchData();
-  }, [id]);
+  }, [contentAnim, headerAnim]);
 
   // ── Fetch data ───────────────────────────────────────────────────────────────
 
@@ -264,10 +243,11 @@ export default function ViewUserProfileScreen() {
         const userItems = items.filter((item) => item.owner?.id === id);
         setListings(userItems);
 
-        // Build public user from first listing's owner
-        if (userItems.length > 0 && !user) {
+        // Build public user from first listing's owner (only if not set yet;
+        // the functional update keeps fetchData independent of `user`)
+        if (userItems.length > 0) {
           const owner = userItems[0].owner;
-          setUser({
+          setUser((prev) => prev ?? {
             id: owner.id,
             first_name: owner.first_name,
             last_name: owner.last_name,
@@ -298,6 +278,11 @@ export default function ViewUserProfileScreen() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
+    fetchData();
+  }, [fetchData]);
 
   // ── Report user ───────────────────────────────────────────────────────────────
 
@@ -594,6 +579,8 @@ export default function ViewUserProfileScreen() {
                 </Text>
               </View>
             </View>
+
+            {id && <CommonTaste userId={id} />}
           </View>
 
           {/* ── Active Listings ── */}

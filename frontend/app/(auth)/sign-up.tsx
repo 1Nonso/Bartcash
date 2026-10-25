@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout, Colors } from "@/constants";
@@ -53,7 +55,7 @@ function PasswordStrengthIndicator({ password }: { password: string }) {
             <Ionicons
               name={passed ? "checkmark-circle" : "ellipse-outline"}
               size={14}
-              color={passed ? Colors.success : Colors.gray[400]}
+              color={passed ? Colors.success : theme.textMuted}
             />
             <Text
               style={[
@@ -97,54 +99,55 @@ export default function SignUpScreen() {
   const [focused, setFocused] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [emailTaken, setEmailTaken] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const headerTranslate = useRef(new Animated.Value(-20)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const cardTranslate = useRef(new Animated.Value(30)).current;
-  const bottomAnim = useRef(new Animated.Value(0)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const headerAnim = useAnimatedValue(0);
+  const headerTranslate = useAnimatedValue(-20);
+  const cardAnim = useAnimatedValue(0);
+  const cardTranslate = useAnimatedValue(30);
+  const bottomAnim = useAnimatedValue(0);
+  const buttonScale = useAnimatedValue(1);
 
-  useRef(
-    (() => {
-      Animated.stagger(80, [
-        Animated.parallel([
-          Animated.spring(headerAnim, {
-            toValue: 1,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-          Animated.spring(headerTranslate, {
-            toValue: 0,
-            tension: 70,
-            friction: 10,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.spring(cardAnim, {
-            toValue: 1,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-          Animated.spring(cardTranslate, {
-            toValue: 0,
-            tension: 60,
-            friction: 11,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.spring(bottomAnim, {
+  // Entrance animation, once on mount (it used to restart on every render).
+  useEffect(() => {
+    Animated.stagger(80, [
+      Animated.parallel([
+        Animated.spring(headerAnim, {
           toValue: 1,
-          tension: 60,
-          friction: 12,
+          tension: 70,
+          friction: 10,
           useNativeDriver: true,
         }),
-      ]).start();
-    })(),
-  ).current;
+        Animated.spring(headerTranslate, {
+          toValue: 0,
+          tension: 70,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(cardAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardTranslate, {
+          toValue: 0,
+          tension: 60,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.spring(bottomAnim, {
+        toValue: 1,
+        tension: 60,
+        friction: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomAnim, cardAnim, cardTranslate, headerAnim, headerTranslate]);
 
   const splitName = (
     name: string,
@@ -157,7 +160,7 @@ export default function SignUpScreen() {
 
   const isValid =
     fullName.trim().length > 0 &&
-    EMAIL_REGEX.test(email) &&
+    EMAIL_REGEX.test(email.trim()) &&
     PASSWORD_REGEX.test(password);
 
   const handleCreateAccount = async () => {
@@ -189,15 +192,18 @@ export default function SignUpScreen() {
       await register({
         first_name,
         last_name,
-        email,
+        email: email.trim(),
         password,
         password_confirmation: password,
       });
       router.push({
         pathname: "/(auth)/otp-verification",
-        params: { type: "Email", flow: "register", email },
+        params: { email: email.trim() },
       });
     } catch (err: any) {
+      // 409: the email is registered; it may be an account that was never
+      // verified, so offer the way back to verification.
+      setEmailTaken(err.response?.status === 409);
       const message =
         err.response?.data?.message ||
         err.response?.data?.errors?.email?.[0] ||
@@ -224,7 +230,7 @@ export default function SignUpScreen() {
     >
       <StatusBar style={theme.statusBarStyle} />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + Spacing[7] }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -263,6 +269,21 @@ export default function SignUpScreen() {
               <Text style={[styles.errorBannerText, { color: theme.error }]}>
                 {error}
               </Text>
+              {emailTaken && (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(auth)/verify-email",
+                      params: { email: email.trim() },
+                    })
+                  }
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.bannerAction, { color: theme.error }]}>
+                    Signed up but didn{"'"}t verify? Verify your email
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
 
@@ -413,7 +434,6 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing[6],
-    paddingTop: Platform.OS === "ios" ? 72 : 52,
     paddingBottom: Spacing[10],
   },
   header: { marginBottom: Spacing[7] },
@@ -431,6 +451,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[4],
   },
   errorBannerText: { ...Typography.caption },
+  bannerAction: {
+    ...Typography.captionMedium,
+    textDecorationLine: "underline",
+    marginTop: Spacing[1],
+  },
   fieldGroup: { marginBottom: Spacing[4] },
   label: { ...Typography.inputLabel, marginBottom: Spacing[2] },
   input: {

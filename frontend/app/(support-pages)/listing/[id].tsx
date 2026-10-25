@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Modal,
+  Pressable,
+  ScrollView,
   Dimensions,
   FlatList,
   Image,
-  ScrollView,
   Share,
   StatusBar,
   StyleSheet,
@@ -13,6 +15,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,7 +25,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -32,14 +35,31 @@ import {
   ItemValuationDetail,
   getItemById,
   getItemValuation,
+  getMyItems,
+  MatchContext,
+  retryItemValuation,
 } from "@/config/items";
+import {
+  CheckRow,
+  ScoreLabel,
+  ScoutBadge,
+  TagChip,
+  WantChip,
+} from "@/components/scout";
 import { getStoredUser } from "@/config/auth";
+import { draftOffer, scoutDraftStore } from "@/config/scout";
+import { useFeatures } from "@/hooks/useFeatures";
+import { showToast } from "@/hooks/toast";
+import { InfoButton } from "@/components/guide/InfoSheet";
+import { useTour } from "@/components/guide/Tour";
 
 type ConfidenceLevel = "high" | "medium" | "low";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_WIDTH * 0.72;
 const POLL_INTERVAL = 5000;
+// The valuation job retries 3 times with backoff, which can take over 2 min.
+const POLL_TIMEOUT_MS = 180000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,7 +103,7 @@ function confidenceFillPercent(level: ConfidenceLevel | null): number {
   }
 }
 
-function timeAgo(dateStr: string): string {
+export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const days = Math.floor(diff / 86400000);
   if (days === 0) return "Today";
@@ -110,14 +130,26 @@ function CarouselDot({ active }: { active: boolean }) {
 
 interface ValuationCardProps {
   valuation: ItemValuationDetail | null;
+  /** Only the owner sees "Calculating value..."; others see unavailable. */
+  isOwner: boolean;
+  /** Owner of a failed valuation: show the Retry button. */
+  canRetry?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
-function ValuationCard({ valuation }: ValuationCardProps) {
+function ValuationCard({
+  valuation,
+  isOwner,
+  canRetry,
+  retrying,
+  onRetry,
+}: ValuationCardProps) {
   const theme = useAuthTheme();
   const range = formatValuationRange(valuation);
   const confidenceLevel = normalizeConfidence(valuation?.confidence ?? null);
   const confidenceFill = confidenceFillPercent(confidenceLevel);
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useAnimatedValue(0);
 
   const isOverride =
     valuation?.status === "completed" && valuation.confidence === null;
@@ -130,22 +162,52 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         useNativeDriver: false,
       }).start();
     }
-  }, [valuation?.status]);
+  }, [confidenceFill, isOverride, progressAnim, valuation?.status]);
 
-  if (!valuation || valuation.status === "failed") {
+  if (
+    !valuation ||
+    valuation.status === "failed" ||
+    (valuation.status === "pending" && !isOwner)
+  ) {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
         </View>
         <Text style={[styles.valuationUnavailable, { color: theme.textMuted }]}>
-          {valuation?.failed_reason
-            ? "Valuation failed. Owner can retry."
+          {valuation?.status === "failed"
+            ? "Valuation failed."
             : "Value estimate unavailable."}
         </Text>
+        {/* Owner only: what went wrong, as a short message from the API. */}
+        {isOwner && valuation?.status === "failed" && !!valuation.failed_reason && (
+          <Text style={[styles.valuationFailedReason, { color: theme.textSecondary }]}>
+            {valuation.failed_reason}
+          </Text>
+        )}
+        {canRetry && (
+          <TouchableOpacity
+            style={[styles.retryBtn, { borderColor: theme.borderDefault }]}
+            onPress={onRetry}
+            disabled={retrying}
+            activeOpacity={0.85}
+          >
+            {retrying ? (
+              <ActivityIndicator size="small" color={theme.ai} />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={14} color={theme.ai} />
+                <Text style={[styles.retryBtnText, { color: theme.ai }]}>
+                  Retry valuation
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -153,14 +215,15 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (valuation.status === "pending") {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="sparkles" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+          <Ionicons name="sparkles" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
         </View>
         <View style={styles.valuationPending}>
-          <ActivityIndicator size="small" color={Colors.ai} />
+          <ActivityIndicator size="small" color={theme.ai} />
           <Text
             style={[styles.valuationPendingText, { color: theme.textMuted }]}
           >
@@ -174,25 +237,25 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   if (isOverride) {
     return (
       <View
-        style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}
+        style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}
       >
         <View style={styles.valuationHeader}>
-          <Ionicons name="pricetag-outline" size={16} color={Colors.ai} />
-          <Text style={styles.valuationTitle}>Owner{"'"}s Estimated Value</Text>
+          <Ionicons name="pricetag-outline" size={16} color={theme.ai} />
+          <Text style={[styles.valuationTitle, { color: theme.ai }]}>Owner{"'"}s Estimated Value</Text>
         </View>
-        <Text style={styles.valuationRange}>{range}</Text>
+        <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
         <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
           Set by the item owner
         </Text>
         <View
-          style={[styles.overrideBadge, { backgroundColor: Colors.aiLight }]}
+          style={[styles.overrideBadge, { backgroundColor: theme.aiLight }]}
         >
           <Ionicons
             name="information-circle-outline"
             size={13}
-            color={Colors.ai}
+            color={theme.ai}
           />
-          <Text style={[styles.overrideBadgeText, { color: Colors.ai }]}>
+          <Text style={[styles.overrideBadgeText, { color: theme.ai }]}>
             This value was manually set and may differ from market rates
           </Text>
         </View>
@@ -201,12 +264,13 @@ function ValuationCard({ valuation }: ValuationCardProps) {
   }
 
   return (
-    <View style={[styles.valuationCard, { backgroundColor: Colors.aiSurface }]}>
+    <View style={[styles.valuationCard, { backgroundColor: theme.aiSurface }]}>
       <View style={styles.valuationHeader}>
-        <Ionicons name="sparkles" size={16} color={Colors.ai} />
-        <Text style={styles.valuationTitle}>Automated Valuation Result</Text>
+        <Ionicons name="sparkles" size={16} color={theme.ai} />
+        <Text style={[styles.valuationTitle, { color: theme.ai, flex: 1 }]}>Automated Valuation Result</Text>
+          <InfoButton topic="valuation" color={theme.ai} />
       </View>
-      <Text style={styles.valuationRange}>{range}</Text>
+      <Text style={[styles.valuationRange, { color: theme.textPrimary }]}>{range}</Text>
       <Text style={[styles.valuationSubtitle, { color: theme.textMuted }]}>
         Based on similar items and market data
       </Text>
@@ -214,18 +278,18 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         <Text style={[styles.confidenceLabel, { color: theme.textMuted }]}>
           Confidence level
         </Text>
-        <Text style={styles.confidenceValue}>
+        <Text style={[styles.confidenceValue, { color: theme.ai }]}>
           {confidenceLevel
             ? confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1)
             : "—"}
         </Text>
       </View>
-      <View style={[styles.progressTrack, { backgroundColor: Colors.aiLight }]}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.aiLight }]}>
         <Animated.View
           style={[
             styles.progressFill,
             {
-              backgroundColor: Colors.ai,
+              backgroundColor: theme.ai,
               width: progressAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: ["0%", "100%"],
@@ -235,16 +299,16 @@ function ValuationCard({ valuation }: ValuationCardProps) {
         />
       </View>
       <View
-        style={[styles.confidenceNote, { backgroundColor: Colors.aiLight }]}
+        style={[styles.confidenceNote, { backgroundColor: theme.aiLight }]}
       >
         <Ionicons
           name="information-circle-outline"
           size={13}
-          color={Colors.ai}
+          color={theme.ai}
         />
-        <Text style={[styles.confidenceNoteText, { color: Colors.ai }]}>
+        <Text style={[styles.confidenceNoteText, { color: theme.ai }]}>
           {confidenceLevel === "high"
-            ? "High Confidence — AI is very certain about this value"
+            ? "High Confidence — this valuation is very reliable"
             : confidenceLevel === "medium"
               ? "Medium Confidence — estimate may vary"
               : "Low Confidence — limited data available"}{" "}
@@ -307,21 +371,91 @@ function OwnerCard({ owner, onPress }: OwnerCardProps) {
   );
 }
 
+// ─── Why this matches (UI spec §13.10) ────────────────────────────────────────
+
+function WhyThisMatchesCard({ context }: { context: MatchContext }) {
+  const theme = useAuthTheme();
+  return (
+    <View style={[styles.whyCard, { backgroundColor: theme.aiSurface }]}>
+      <View style={styles.whyHeader}>
+        <Text style={[styles.whyTitle, { color: theme.textPrimary }]}>
+          Why this matches
+        </Text>
+        <ScoutBadge />
+      </View>
+      {context.score_label && <ScoreLabel label={context.score_label} />}
+      <Text style={[styles.whyReason, { color: theme.textSecondary }]}>
+        {context.reason}
+      </Text>
+      <View style={styles.whyChecks}>
+        {context.checked.map((c) => (
+          <CheckRow key={c.key} label={c.label} result={c.result} />
+        ))}
+      </View>
+      {context.shared_interests.length > 0 && (
+        <>
+          <Text style={[styles.whyTagsLabel, { color: theme.textSecondary }]}>
+            You both like
+          </Text>
+          <View style={styles.chipWrap}>
+            {context.shared_interests.map((e) => (
+              <TagChip key={e.qloo_entity_id} name={e.name} />
+            ))}
+          </View>
+        </>
+      )}
+      {context.shared_tags.length > 0 && (
+        <>
+          <Text style={[styles.whyTagsLabel, { color: theme.textSecondary }]}>
+            In common
+          </Text>
+          <View style={styles.chipWrap}>
+            {context.shared_tags.map((t) => (
+              <TagChip key={t.tag_id} name={t.name} />
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ListingDetailScreen() {
   const theme = useAuthTheme();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // context: the viewer's listing this was opened from on Home (match context).
+  const { id, context } = useLocalSearchParams<{ id: string; context?: string }>();
 
   const [item, setItem] = useState<ItemDetail | null>(null);
+
+  // Opened from a match: a short tour of the Why card and Propose Trade.
+  const whyRef = useRef<View>(null);
+  const proposeRef = useRef<View>(null);
+  const tourSteps = useMemo(
+    () => [
+      { target: whyRef, text: "Why Scout picked this: what fits, and whether they may want yours." },
+      { target: proposeRef, text: "Ready? Make an offer here. Scout never sends anything for you." },
+    ],
+    [],
+  );
+  const scrollRef = useRef<any>(null);
+  const tour = useTour("match", tourSteps, !!context && !!item?.match_context, { scrollRef });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { qloo } = useFeatures();
+  // Viewer's available listings (Draft an offer needs one to offer).
+  const [myAvailable, setMyAvailable] = useState<{ id: string; title: string }[]>([]);
+  const [drafting, setDrafting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentAnim = useAnimatedValue(0);
 
   // ── handleBack is now correctly inside the component ──────────────────────
   const handleBack = useCallback(() => {
@@ -338,14 +472,58 @@ export default function ListingDetailScreen() {
     });
   }, []);
 
+  const stopValuationPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startValuationPolling = useCallback((itemId: string) => {
+    stopValuationPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const valuation = await getItemValuation(itemId);
+        if (valuation.status !== "pending") {
+          stopValuationPolling();
+          setItem((prev) => (prev ? { ...prev, valuation } : prev));
+        }
+      } catch {
+        // Keep polling through network blips; the timeout below ends it.
+      }
+    }, POLL_INTERVAL);
+
+    // Safety timeout — if still pending after 3 min, show it as failed so the
+    // owner gets the Retry button instead of an endless spinner.
+    pollTimeoutRef.current = setTimeout(() => {
+      stopValuationPolling();
+      setItem((prev) =>
+        prev?.valuation?.status === "pending"
+          ? { ...prev, valuation: { ...prev.valuation, status: "failed" } }
+          : prev,
+      );
+    }, POLL_TIMEOUT_MS);
+  }, [stopValuationPolling]);
+
   const fetchItem = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await getItemById(id);
+      const [data, user] = await Promise.all([
+        getItemById(id, context),
+        getStoredUser(),
+      ]);
       setItem(data);
       setError(null);
 
-      if (data.valuation?.status === "pending") {
+      // Only the owner watches a pending valuation; others see it as unavailable.
+      if (
+        data.valuation?.status === "pending" &&
+        data.owner.id === user?.id
+      ) {
         startValuationPolling(id);
       }
 
@@ -365,37 +543,37 @@ export default function ListingDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [contentAnim, id, context, startValuationPolling]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     fetchItem();
     return () => stopValuationPolling();
-  }, [fetchItem]);
-
-  const startValuationPolling = useCallback((itemId: string) => {
-    stopValuationPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const valuation = await getItemValuation(itemId);
-        if (valuation.status !== "pending") {
-          stopValuationPolling();
-          setItem((prev) => (prev ? { ...prev, valuation } : prev));
-        }
-      } catch {
-        stopValuationPolling();
-      }
-    }, POLL_INTERVAL);
-  }, []);
-
-  const stopValuationPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
+  }, [fetchItem, stopValuationPolling]);
 
   const isOwner = item ? item.owner.id === currentUserId : false;
   const canProposeTrade = !isOwner && item?.status === "available";
+
+  const handleRetryValuation = useCallback(async () => {
+    if (!item) return;
+    setRetrying(true);
+    try {
+      await retryItemValuation(item.id);
+      setItem((prev) =>
+        prev?.valuation
+          ? { ...prev, valuation: { ...prev.valuation, status: "pending" } }
+          : prev,
+      );
+      startValuationPolling(item.id);
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err.response?.data?.message ?? "Could not retry valuation.",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  }, [item, startValuationPolling]);
 
   const handleShare = useCallback(async () => {
     if (!item) return;
@@ -411,6 +589,57 @@ export default function ListingDetailScreen() {
       params: { id: item.id },
     });
   }, [item]);
+
+  // ── Draft an offer with Scout (UI §13.10, FLOW §10.9) ──────────────────────
+
+  useEffect(() => {
+    if (!qloo || !item || isOwner) return;
+    let live = true;
+    getMyItems({ status: "available", limit: 50 })
+      .then((d) => live && setMyAvailable(d.items.map((i) => ({ id: i.id, title: i.title }))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [qloo, item, isOwner]);
+
+  const canDraft = qloo && !isOwner && item?.status === "available" && myAvailable.length > 0;
+
+  const runDraft = useCallback(
+    async (sourceId: string) => {
+      if (!item || drafting) return;
+      setPickerOpen(false);
+      setDrafting(true);
+      try {
+        const draft = await draftOffer(sourceId, item.id);
+        scoutDraftStore.set(draft);
+        router.push({
+          pathname: "/(support-pages)/trade/[id]/propose",
+          params: { id: item.id, draft: "1" },
+        });
+      } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 422) {
+          showToast("error", "This listing is no longer available.");
+          fetchItem();
+        } else if (status === 429) {
+          showToast("info", "Slow down a moment.");
+        } else {
+          showToast("error", "Scout could not draft that. You can still make an offer yourself.");
+        }
+      } finally {
+        setDrafting(false);
+      }
+    },
+    [item, drafting, fetchItem],
+  );
+
+  const handleDraft = useCallback(() => {
+    // From a Home match: offer that listing. Otherwise ask which one.
+    if (context && myAvailable.some((m) => m.id === context)) return runDraft(context);
+    if (myAvailable.length === 1) return runDraft(myAvailable[0]!.id);
+    setPickerOpen(true);
+  }, [context, myAvailable, runDraft]);
 
   const handleEditListing = useCallback(() => {
     if (!item) return;
@@ -532,8 +761,11 @@ export default function ListingDetailScreen() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={tour.onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + (canDraft ? 156 : 100) }}
         style={{ opacity: contentAnim }}
       >
         {/* Hero carousel */}
@@ -589,7 +821,7 @@ export default function ListingDetailScreen() {
 
           <View style={styles.metaRow}>
             <View
-              style={[styles.metaBadge, { backgroundColor: Colors.gray[100] }]}
+              style={[styles.metaBadge, { backgroundColor: theme.surfaceVariant }]}
             >
               <Text
                 style={[styles.metaBadgeText, { color: theme.textPrimary }]}
@@ -609,7 +841,19 @@ export default function ListingDetailScreen() {
             </Text>
           </View>
 
-          <ValuationCard valuation={item.valuation} />
+          <ValuationCard
+            valuation={item.valuation}
+            isOwner={isOwner}
+            canRetry={isOwner && item.valuation?.status === "failed"}
+            retrying={retrying}
+            onRetry={handleRetryValuation}
+          />
+
+          {item.match_context && (
+            <View ref={whyRef} collapsable={false}>
+              <WhyThisMatchesCard context={item.match_context} />
+            </View>
+          )}
 
           {item.description && (
             <View
@@ -653,7 +897,40 @@ export default function ListingDetailScreen() {
             </Text>
           </View>
 
-          {item.desired_trade && (
+          {item.wants && item.wants.length > 0 ? (
+            <View
+              style={[styles.section, { borderTopColor: theme.borderSubtle }]}
+            >
+              <View style={styles.sectionHeader}>
+                <Ionicons
+                  name="swap-horizontal-outline"
+                  size={16}
+                  color={theme.textPrimary}
+                />
+                <Text
+                  style={[styles.sectionTitle, { color: theme.textPrimary }]}
+                >
+                  {item.owner.first_name} would take
+                </Text>
+              </View>
+              <View style={styles.chipWrap}>
+                {item.wants.map((w) => (
+                  <WantChip key={w.category.id} name={w.category.name} rank={w.rank} />
+                ))}
+              </View>
+              {!!item.desired_trade && (
+                <Text
+                  style={[
+                    styles.sectionBody,
+                    styles.wantNote,
+                    { color: theme.textMuted },
+                  ]}
+                >
+                  {item.desired_trade}
+                </Text>
+              )}
+            </View>
+          ) : !!item.desired_trade && (
             <View
               style={[styles.section, { borderTopColor: theme.borderSubtle }]}
             >
@@ -761,9 +1038,33 @@ export default function ListingDetailScreen() {
             <Text style={styles.ctaPrimaryText}>Edit Listing</Text>
           </TouchableOpacity>
         ) : item.status === "traded" ? null : (
+          <>
+          {canDraft && (
+            <TouchableOpacity
+              style={[styles.draftBtn, { backgroundColor: theme.aiLight, borderColor: theme.ai }]}
+              onPress={handleDraft}
+              disabled={drafting}
+              activeOpacity={0.85}
+              accessibilityLabel="Draft an offer with Scout"
+            >
+              {drafting ? (
+                <>
+                  <ActivityIndicator size="small" color={theme.ai} />
+                  <Text style={[styles.draftBtnText, { color: theme.ai }]}>Scout is drafting...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={16} color={theme.ai} />
+                  <Text style={[styles.draftBtnText, { color: theme.ai }]}>Draft an offer with Scout</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          <View ref={proposeRef} collapsable={false} style={styles.ctaWrap}>
           <TouchableOpacity
             style={[
               styles.ctaPrimary,
+              styles.ctaInWrap,
               {
                 backgroundColor: canProposeTrade
                   ? Colors.primary
@@ -779,8 +1080,42 @@ export default function ListingDetailScreen() {
               {item.status === "in_trade" ? "In a Trade" : "Propose Trade"}
             </Text>
           </TouchableOpacity>
+          </View>
+          </>
         )}
       </View>
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setPickerOpen(false)} />
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: theme.bg, paddingBottom: insets.bottom + Spacing[4], borderColor: theme.borderSubtle },
+          ]}
+        >
+          <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>Which listing do you want to offer?</Text>
+          <ScrollView style={styles.sheetList}>
+            {myAvailable.map((m) => (
+              <TouchableOpacity
+                key={m.id}
+                style={[styles.sheetRow, { borderBottomColor: theme.borderSubtle }]}
+                onPress={() => runDraft(m.id)}
+              >
+                <Text numberOfLines={1} style={[styles.sheetRowText, { color: theme.textPrimary }]}>
+                  {m.title}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+      {tour.node}
     </View>
   );
 }
@@ -868,16 +1203,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing[2],
   },
-  valuationTitle: { ...Typography.bodyMedium, color: Colors.ai },
+  valuationTitle: { ...Typography.bodyMedium },
   valuationRange: {
     ...Typography.cardTitleLarge,
-    color: Colors.text.primary,
     fontSize: 28,
     marginBottom: Spacing[1],
     paddingTop: Spacing[3],
   },
   valuationSubtitle: { ...Typography.caption, marginBottom: Spacing[3] },
   valuationUnavailable: { ...Typography.body },
+  valuationFailedReason: { ...Typography.caption, marginTop: Spacing[1] },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    borderWidth: Layout.borderWidth,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing[2],
+    marginTop: Spacing[3],
+  },
+  retryBtnText: { ...Typography.captionMedium },
   valuationPending: {
     flexDirection: "row",
     alignItems: "center",
@@ -891,7 +1237,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing[2],
   },
   confidenceLabel: { ...Typography.caption },
-  confidenceValue: { ...Typography.captionMedium, color: Colors.ai },
+  confidenceValue: { ...Typography.captionMedium },
   progressTrack: {
     height: 6,
     borderRadius: Radius.full,
@@ -930,6 +1276,19 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { ...Typography.bodyMedium },
   sectionBody: { ...Typography.body, lineHeight: 22 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: Spacing[2] },
+  wantNote: { marginTop: Spacing[2] },
+  whyCard: {
+    marginTop: Spacing[3],
+    borderRadius: Radius.xl,
+    padding: Spacing[4],
+    gap: Spacing[2],
+  },
+  whyHeader: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
+  whyTitle: { ...Typography.bodyMedium, flex: 1 },
+  whyReason: { ...Typography.body },
+  whyChecks: { marginTop: Spacing[1] },
+  whyTagsLabel: { ...Typography.captionMedium, marginTop: Spacing[1] },
   locationRow: { flexDirection: "row", alignItems: "center", gap: Spacing[2] },
   locationText: { ...Typography.body },
 
@@ -971,6 +1330,42 @@ const styles = StyleSheet.create({
     paddingTop: Spacing[3],
     borderTopWidth: 1,
   },
+  ctaWrap: { alignSelf: "stretch" },
+  draftBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing[2],
+    height: 44,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing[2],
+  },
+  draftBtnText: { ...Typography.buttonSm },
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: "70%",
+    borderTopLeftRadius: Radius["3xl"],
+    borderTopRightRadius: Radius["3xl"],
+    borderTopWidth: 1,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing[4],
+  },
+  sheetTitle: { ...Typography.sectionTitle, marginBottom: Spacing[2] },
+  sheetList: { flexGrow: 0 },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sheetRowText: { ...Typography.body, flex: 1 },
+  ctaInWrap: { flex: 0 },
   ctaPrimary: {
     flex: 1,
     flexDirection: "row",

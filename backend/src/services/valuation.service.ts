@@ -1,4 +1,5 @@
 import { db } from '../config/db.config';
+import { groqLimiter, handle429 } from './groqLimiter';
 
 const GROQ_MODEL =
    process.env.GROQ_MODEL!;
@@ -56,9 +57,14 @@ async function callGroq(
    prompt: string,
    imageBase64: string,
 ) {
-   const response = await fetch(
-      `${GROQ_BASE_URL}/chat/completions`,
-      {
+   // Paced with the other Groq callers; a 429 is logged and, when
+   // Retry-After is short, sent once more. Any failure throws, so the
+   // valuation job retries.
+   const send = async () => {
+      if (!(await groqLimiter.acquire())) {
+         throw new Error('Groq request paced out (rate limit queue full).');
+      }
+      return fetch(`${GROQ_BASE_URL}/chat/completions`, {
          method: 'POST',
          headers: {
             Authorization: `Bearer ${GROQ_API_KEY}`,
@@ -68,6 +74,8 @@ async function callGroq(
          body: JSON.stringify({
             model: GROQ_MODEL,
             temperature: 0.1,
+            // Caps the output-token reservation (Groq OTPM, see groqJson).
+            max_tokens: 100,
             messages: [
                {
                   role: 'user',
@@ -86,8 +94,22 @@ async function callGroq(
                },
             ],
          }),
-      },
-   );
+      });
+   };
+
+   let response = await send();
+   if (response.status === 429) {
+      const waitMs = await handle429(response, 'valuation');
+      if (waitMs === null) {
+         throw new Error('Groq rate limit reached (long Retry-After).');
+      }
+      await groqLimiter.sleep(waitMs);
+      response = await send();
+      if (response.status === 429) {
+         await handle429(response, 'valuation');
+         throw new Error('Groq rate limit reached.');
+      }
+   }
 
    if (!response.ok) {
       throw new Error(
@@ -181,8 +203,7 @@ export async function runItemValuation(
          where: { itemId },
          data: {
             status: 'failed',
-            failedReason:
-               'No images available for valuation.',
+            failedReason: 'no_image',
          },
       });
       return;

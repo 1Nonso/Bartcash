@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieparser from 'cookie-parser';
 import morgan from 'morgan';
+import { rateLimit } from 'express-rate-limit';
 import authRoutes from '../src/routes/auth.routes';
 import userRoutes from '../src/routes/user.routes';
 import categoryRoutes from '../src/routes/categories.routes';
@@ -13,20 +14,38 @@ import disputeRoutes from '../src/routes/dispute.routes';
 import commentRoutes from '../src/routes/comment.routes';
 import notificationRoutes from '../src/routes/notification.routes';
 import messageRoutes from '../src/routes/message.routes';
+import tasteRoutes, { userTasteRouter } from './routes/taste.routes';
+import scoutRoutes from './routes/scout.routes';
 import { errorHandler } from './middlewares/errorHandler.middleware';
 import { resetPasswordRedirect } from './controllers/auth.controllers';
 
 const app = express();
 
+const limiter = rateLimit({
+   // Per IP. Generous because many Nigerian mobile users share a carrier IP;
+   // per-user limits live in libs/rateLimiter.ts.
+   windowMs: 60 * 1000,
+   limit: 300,
+   message:
+      'Too many request. Try again later',
+});
+
 app.use(morgan('combined'));
 app.use(express.json());
+// CLIENT_URL: comma-separated web origins allowed to call the API (the web
+// build). Requests with no Origin (the mobile app, curl) are not affected.
+const allowedOrigins = (process.env.CLIENT_URL ?? '')
+   .split(',')
+   .map((o) => o.trim().replace(/\/+$/, ''))
+   .filter(Boolean);
 app.use(
    cors({
-      origin: process.env.CLIENT_URL,
+      origin: allowedOrigins.length > 0 ? allowedOrigins : false,
       credentials: true,
    }),
 );
 app.use(cookieparser());
+app.use(limiter);
 app.set('trust proxy', 1);
 app.get('/health', (_req, res) =>
    res.json({ ok: true }),
@@ -42,6 +61,9 @@ app.use('/api/user', userRoutes);
 app.use('/api', commentRoutes); // /items/:id/comments, /comments/:id (before items)
 app.use('/api', ratingRoutes); // /ratings, /users/:id/ratings
 app.use('/api/items', itemRoutes);
+app.use('/api/taste', tasteRoutes);
+app.use('/api', userTasteRouter); // /users/:id/taste-compatibility
+app.use('/api/scout', scoutRoutes);
 app.use(
    '/api/categories',
    categoryRoutes,

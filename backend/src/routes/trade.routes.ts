@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import * as tradeController from '../controllers/trade.controllers';
+import { limiter } from '../libs/rateLimiter';
 
 const router = Router();
 
 router.post(
    '/',
    requireAuth,
+   limiter,
    tradeController.create,
 );
 router.get(
@@ -22,6 +24,7 @@ router.get(
 router.post(
    '/:id/rebargain',
    requireAuth,
+   limiter,
    tradeController.rebargain,
 );
 router.patch(

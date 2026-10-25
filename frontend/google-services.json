@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "977621317164",
+    "project_id": "bartcash-49340",
+    "storage_bucket": "bartcash-49340.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977621317164:android:96644d3c649c6f4ddd8389",
+        "android_client_info": {
+          "package_name": "com.bartcash.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1FVnacPod8jJt8TgmVz-_3K-GRNgBgQA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { goBack } from "@/hooks/navigation";
 import { useAuthTheme } from "@/constants/useAuthTheme";
 import { Spacing, Radius, Typography, Layout } from "@/constants";
@@ -22,6 +24,7 @@ const PASSWORD_REGEX = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
 
 export default function ResetPasswordScreen() {
   const theme = useAuthTheme();
+  const insets = useSafeAreaInsets();
 
   // Token is extracted from the deep link
   // bartcash://reset-password?token=xxxxxx
@@ -33,12 +36,17 @@ export default function ResetPasswordScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  // No token in the URL: show the error from the first render.
+  const [error, setError] = useState(
+    token
+      ? ""
+      : "This reset link is invalid or has expired. Please request a new one.",
+  );
   const [success, setSuccess] = useState(false);
 
-  const contentAnim = useRef(new Animated.Value(0)).current;
-  const contentTranslate = useRef(new Animated.Value(20)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const contentAnim = useAnimatedValue(0);
+  const contentTranslate = useAnimatedValue(20);
+  const buttonScale = useAnimatedValue(1);
 
   useEffect(() => {
     Animated.parallel([
@@ -55,14 +63,7 @@ export default function ResetPasswordScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    // If no token in the URL — show error immediately
-    if (!token) {
-      setError(
-        "This reset link is invalid or has expired. Please request a new one.",
-      );
-    }
-  }, []);
+  }, [contentAnim, contentTranslate]);
 
   // Auto-navigate to login after successful reset
   useEffect(() => {
@@ -125,15 +126,6 @@ export default function ResetPasswordScreen() {
       setLoading(false);
     }
   };
-
-  const inputStyle = (field: string) => [
-    styles.input,
-    {
-      backgroundColor: focused === field ? theme.inputBgFocused : theme.inputBg,
-      borderColor: focused === field ? theme.borderFocus : theme.borderDefault,
-      color: theme.textPrimary,
-    },
-  ];
 
   // ── No token state ────────────────────────────────────────────────────────
   if (!token) {
@@ -205,6 +197,7 @@ export default function ResetPasswordScreen() {
         <Animated.View
           style={[
             styles.content,
+            { paddingTop: insets.top + Spacing[3] },
             {
               opacity: contentAnim,
               transform: [{ translateY: contentTranslate }],
@@ -383,7 +376,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: Spacing[6],
-    paddingTop: Platform.OS === "ios" ? 56 : 40,
   },
   backBtn: {
     paddingVertical: Spacing[2],

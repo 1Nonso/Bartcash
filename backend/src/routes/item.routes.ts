@@ -3,7 +3,12 @@ import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware';
 import { runUploadMiddleware } from '../middlewares/upload.middleware';
 import * as itemController from '../controllers/item.controllers';
+import * as itemImagesController from '../controllers/itemImages.controllers';
 import multer from 'multer';
+import { limiter, userLimiter } from '../libs/rateLimiter';
+import { requireQloo } from '../middlewares/requireQloo.middleware';
+import * as wantsController from '../controllers/wants.controllers';
+import * as matchesController from '../controllers/matches.controllers';
 
 const upload = multer({
    storage: multer.memoryStorage(),
@@ -11,11 +16,13 @@ const upload = multer({
       fileSize: 10 * 1024 * 1024,
    },
 });
+
 const router = Router();
 
 router.post(
    '/',
    requireAuth,
+   limiter,
    upload.array('images', 6),
    itemController.create,
 );
@@ -32,6 +39,8 @@ router.post(
    runUploadMiddleware,
    itemController.uploadImages,
 );
+router.delete('/:id/images/:imageId', requireAuth, userLimiter(60), itemImagesController.destroy);
+router.patch('/:id/images/:imageId/primary', requireAuth, userLimiter(60), itemImagesController.makePrimary);
 router.get(
    '/',
    requireAuth,
@@ -70,7 +79,31 @@ router.get(
 router.post(
    '/:id/valuation/retry',
    requireAuth,
+   limiter,
    itemController.retryValuation,
+);
+// Qloo wants (Phase 4b, Section 16.5). requireQloo runs before auth so a
+// disabled feature looks like it does not exist.
+router.get(
+   '/:id/want-suggestions',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   wantsController.wantSuggestions,
+);
+router.put(
+   '/:id/wants',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   wantsController.setItemWants,
+);
+router.get(
+   '/:id/matches',
+   requireQloo,
+   requireAuth,
+   userLimiter(60),
+   matchesController.itemMatches,
 );
 router.patch(
    '/:id/valuation/override',

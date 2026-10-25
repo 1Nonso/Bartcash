@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StatusBar,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -167,7 +167,7 @@ export default function TradeAgreementScreen() {
             </Text>
             <Text style={[styles.cashAmount, { color: "#0F766E" }]}>
               {offer.cash_amount
-                ? `₦${Number(offer.cash_amount).toLocaleString()}`
+                ? `$${Number(offer.cash_amount).toLocaleString()}`
                 : "—"}
             </Text>
           </View>
@@ -275,7 +275,7 @@ export default function TradeAgreementScreen() {
                 <Text
                   style={[styles.infoTextBold, { color: theme.textPrimary }]}
                 >
-                  ₦{Number(offer.top_up_amount).toLocaleString()}
+                  ${Number(offer.top_up_amount).toLocaleString()}
                 </Text>
               </Text>
             </View>
@@ -353,13 +353,13 @@ export default function TradeAgreementScreen() {
         )}
 
         {/* Chat unlock notice */}
-        <View style={[styles.noticeBox, { backgroundColor: Colors.aiSurface }]}>
+        <View style={[styles.noticeBox, { backgroundColor: theme.aiSurface }]}>
           <Ionicons
             name="chatbubble-ellipses-outline"
             size={16}
-            color={Colors.ai}
+            color={theme.ai}
           />
-          <Text style={[styles.noticeText, { color: Colors.ai }]}>
+          <Text style={[styles.noticeText, { color: theme.ai }]}>
             Chat will open after you accept to arrange logistics.
           </Text>
         </View>

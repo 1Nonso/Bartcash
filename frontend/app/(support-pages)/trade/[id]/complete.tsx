@@ -14,7 +14,7 @@
  *  4b. Only one confirmed → navigate back to Trade Detail
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -26,6 +26,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -90,10 +91,26 @@ export default function TradeCompletionScreen() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const noticeAnim = useRef(new Animated.Value(0)).current;
-  const ctaAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useAnimatedValue(0);
+  const cardAnim = useAnimatedValue(0);
+  const noticeAnim = useAnimatedValue(0);
+  const ctaAnim = useAnimatedValue(0);
+
+  const loadData = async () => {
+    try {
+      const [raw, tradeData] = await Promise.all([
+        AsyncStorage.getItem(USER_KEY),
+        getTradeById(id!),
+      ]);
+      if (raw) setCurrentUserId(JSON.parse(raw).id);
+      setTrade(tradeData);
+      setError(null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to load trade details.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -122,24 +139,10 @@ export default function TradeCompletionScreen() {
         friction: 10,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; loadData is recreated each render
   }, []);
-
-  const loadData = async () => {
-    try {
-      const [raw, tradeData] = await Promise.all([
-        AsyncStorage.getItem(USER_KEY),
-        getTradeById(id!),
-      ]);
-      if (raw) setCurrentUserId(JSON.parse(raw).id);
-      setTrade(tradeData);
-      setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load trade details.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleConfirm = useCallback(async () => {
     if (!id) return;
@@ -211,7 +214,7 @@ export default function TradeCompletionScreen() {
     : null;
   const agreedAmountLabel =
     agreedAmount && Number(agreedAmount) > 0
-      ? `₦${Number(agreedAmount).toLocaleString()}`
+      ? `$${Number(agreedAmount).toLocaleString()}`
       : null;
 
   if (loading) {
@@ -402,7 +405,7 @@ export default function TradeCompletionScreen() {
                 <View
                   style={[
                     styles.methodBadge,
-                    { backgroundColor: Colors.aiSurface },
+                    { backgroundColor: theme.aiSurface },
                   ]}
                 >
                   <Ionicons
@@ -412,9 +415,9 @@ export default function TradeCompletionScreen() {
                         : "cube-outline"
                     }
                     size={12}
-                    color={Colors.ai}
+                    color={theme.ai}
                   />
-                  <Text style={styles.methodBadgeText}>
+                  <Text style={[styles.methodBadgeText, { color: theme.ai }]}>
                     {trade.completion_method === "meetup"
                       ? "Meetup"
                       : "Delivery"}

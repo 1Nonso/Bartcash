@@ -1,12 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
-  Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -14,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,6 +29,10 @@ import {
   getItemById,
   updateItem,
 } from "@/config/items";
+import { apiErrorMessage, setWants } from "@/config/wants";
+import { useFeatures } from "@/hooks/useFeatures";
+import WantPicker from "@/components/WantPicker";
+import { ListingPhotos } from "@/components/ListingPhotos";
 
 type Condition = "new" | "good" | "fair" | "poor";
 
@@ -57,6 +60,15 @@ export default function EditListingScreen() {
   const [desiredTrade, setDesiredTrade] = useState("");
   const [location, setLocation] = useState("");
 
+  // Wants (Qloo, UI §13.9). The note is desiredTrade, edited in the picker.
+  const { qloo } = useFeatures();
+  const [picked, setPicked] = useState<string[]>([]);
+  // Picks as loaded; null until the suggestions answer.
+  const [initialPicked, setInitialPicked] = useState<string[] | null>(null);
+  const picksChanged =
+    initialPicked !== null &&
+    JSON.stringify(picked) !== JSON.stringify(initialPicked);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,7 +81,7 @@ export default function EditListingScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Entrance animation
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -107,7 +119,7 @@ export default function EditListingScreen() {
       }
     };
     load();
-  }, [id]);
+  }, [contentAnim, id]);
 
   // ── Validation ───────────────────────────────────────────────────────────────
 
@@ -119,7 +131,7 @@ export default function EditListingScreen() {
     });
   };
 
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     if (!title.trim()) newErrors.title = "Title is required.";
     else if (title.trim().length > 255)
@@ -131,12 +143,23 @@ export default function EditListingScreen() {
       newErrors.description = "Description must be at least 20 characters.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [title, selectedCategory, condition, description]);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!validate() || !id) return;
+    if (!validate() || !id || !item) return;
+    // An available listing must keep at least one want (FLOW §10.5).
+    if (qloo && item.status === "available" && picked.length === 0) {
+      setErrors((prev) => ({
+        ...prev,
+        wants: "Pick at least one category.",
+      }));
+      return;
+    }
+    // With picks, the note travels with the wants (it can be cleared there).
+    const wantsOwnNote = qloo && picked.length > 0;
+    const noteChanged = desiredTrade.trim() !== (item.desired_trade ?? "");
     setSaving(true);
     try {
       const payload: UpdateItemPayload = {
@@ -144,10 +167,30 @@ export default function EditListingScreen() {
         description: description.trim(),
         category_id: selectedCategory!,
         condition: condition!,
-        desired_trade: desiredTrade.trim() || undefined,
+        desired_trade: wantsOwnNote
+          ? undefined
+          : desiredTrade.trim() || undefined,
         location: location.trim() || undefined,
       };
       await updateItem(id, payload);
+      if (
+        wantsOwnNote &&
+        item.status !== "in_trade" &&
+        (picksChanged || noteChanged)
+      ) {
+        try {
+          await setWants(id, picked, desiredTrade.trim() || null);
+        } catch (err: any) {
+          Alert.alert(
+            "Error",
+            apiErrorMessage(
+              err,
+              "Your details were saved, but your choices were not. Please try again.",
+            ),
+          );
+          return;
+        }
+      }
       goBack();
     } catch (err: any) {
       const status = err.response?.status;
@@ -173,7 +216,12 @@ export default function EditListingScreen() {
       setSaving(false);
     }
   }, [
+    validate,
     id,
+    item,
+    qloo,
+    picked,
+    picksChanged,
     title,
     description,
     selectedCategory,
@@ -257,7 +305,8 @@ export default function EditListingScreen() {
       condition !== item.condition ||
       description.trim() !== (item.description ?? "") ||
       desiredTrade.trim() !== (item.desired_trade ?? "") ||
-      location.trim() !== (item.location ?? "");
+      location.trim() !== (item.location ?? "") ||
+      picksChanged;
 
     if (hasChanges) {
       Alert.alert("Discard changes?", "Your unsaved changes will be lost.", [
@@ -275,6 +324,7 @@ export default function EditListingScreen() {
     description,
     desiredTrade,
     location,
+    picksChanged,
   ]);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
@@ -382,6 +432,14 @@ export default function EditListingScreen() {
             </Text>
           </View>
         )}
+
+        {/* ── Photos (saved at once; components/ListingPhotos) ── */}
+        <ListingPhotos
+          itemId={item.id}
+          images={item.images}
+          editable={item.status === "draft" || item.status === "available"}
+          onChange={(images) => setItem((prev) => (prev ? { ...prev, images } : prev))}
+        />
 
         {/* ── Basic Information ── */}
         <View
@@ -586,41 +644,67 @@ export default function EditListingScreen() {
             <Text style={styles.errorText}>{errors.description}</Text>
           )}
 
-          <Text
-            style={[
-              styles.fieldLabel,
-              { color: theme.textPrimary, marginTop: Spacing[4] },
-            ]}
-          >
-            What I{"'"}m looking for
-          </Text>
-          <TextInput
-            style={[
-              styles.textarea,
-              {
-                backgroundColor: tradeFocused
-                  ? theme.inputBgFocused
-                  : theme.inputBg,
-                borderColor: tradeFocused
-                  ? theme.borderFocus
-                  : theme.borderDefault,
-                color: theme.textPrimary,
-              },
-            ]}
-            value={desiredTrade}
-            onChangeText={setDesiredTrade}
-            onFocus={() => setTradeFocused(true)}
-            onBlur={() => setTradeFocused(false)}
-            placeholder="What would you like in exchange?"
-            placeholderTextColor={theme.textPlaceholder}
-            multiline
-            maxLength={500}
-            textAlignVertical="top"
-          />
-          <Text style={[styles.charCount, { color: theme.textMuted }]}>
-            {desiredTrade.length}/500 characters
-          </Text>
+          {!qloo && (
+            <>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: theme.textPrimary, marginTop: Spacing[4] },
+                ]}
+              >
+                What I{"'"}m looking for
+              </Text>
+              <TextInput
+                style={[
+                  styles.textarea,
+                  {
+                    backgroundColor: tradeFocused
+                      ? theme.inputBgFocused
+                      : theme.inputBg,
+                    borderColor: tradeFocused
+                      ? theme.borderFocus
+                      : theme.borderDefault,
+                    color: theme.textPrimary,
+                  },
+                ]}
+                value={desiredTrade}
+                onChangeText={setDesiredTrade}
+                onFocus={() => setTradeFocused(true)}
+                onBlur={() => setTradeFocused(false)}
+                placeholder="What would you like in exchange?"
+                placeholderTextColor={theme.textPlaceholder}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+              />
+              <Text style={[styles.charCount, { color: theme.textMuted }]}>
+                {desiredTrade.length}/500 characters
+              </Text>
+            </>
+          )}
         </View>
+
+        {/* ── Wants (Qloo) ── */}
+        {qloo && (
+          <View>
+            <WantPicker
+              itemId={item.id}
+              picked={picked}
+              onChangePicked={(ids) => {
+                setPicked(ids);
+                if (ids.length > 0) clearError("wants");
+              }}
+              note={desiredTrade}
+              onChangeNote={setDesiredTrade}
+              onLoaded={(d) => {
+                setPicked(d.picked_category_ids);
+                setInitialPicked(d.picked_category_ids);
+              }}
+              showPickError={!!errors.wants}
+              disabled={item.status === "in_trade"}
+            />
+          </View>
+        )}
 
         {/* ── Location ── */}
         <View

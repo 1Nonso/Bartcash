@@ -24,45 +24,24 @@ import {
    encodeCursor,
 } from '../utils/cursor';
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
+import { isQlooEnabled } from '../config/features.config';
+import { queueMatchRefresh } from '../services/matchRefresh.service';
+import {
+   getMatchContext,
+   getMatchSummaries,
+} from '../services/matchContext.service';
+import {
+   formatOwner,
+   formatValuation,
+} from '../utils/itemFormat';
+import {
+   ensureItemTaste,
+   queueItemTaste,
+   requestItemTaste,
+} from '../services/itemTaste.service';
+import z from 'zod';
 
 const IMAGE_LIMIT = 6;
-
-function formatValuation(
-   valuation: any,
-) {
-   if (!valuation) return null;
-   return {
-      id: valuation.id,
-      value_min: valuation.valueMin,
-      value_max: valuation.valueMax,
-      currency: valuation.currency,
-      confidence: valuation.confidence,
-      status: valuation.status,
-      failed_reason:
-         valuation.failedReason,
-   };
-}
-
-function formatOwner(
-   user: any,
-   { extended = false } = {},
-) {
-   return {
-      id: user.id,
-      first_name: user.firstName,
-      last_name: user.lastName,
-      profile_photo: user.profilePhoto,
-      average_rating:
-         user.averageRating,
-      ...(extended
-         ? {
-              total_trades:
-                 user.totalTrades,
-           }
-         : {}),
-   };
-}
 
 function checkDeclaredValueOutlier(
    declaredValue: number,
@@ -165,10 +144,12 @@ export async function create(
    }
 
    const itemId = randomUUID();
+
    const uploaded: {
       key: string;
       url: string;
    }[] = [];
+
    try {
       for (const [i, file] of files
          .slice(0, IMAGE_LIMIT)
@@ -183,6 +164,7 @@ export async function create(
             ),
          });
       }
+
       const { item, valuation } =
          await db.$transaction(
             async (tx) => {
@@ -243,12 +225,24 @@ export async function create(
                         },
                      },
                   );
+               if (isQlooEnabled()) {
+                  await tx.itemTaste.create(
+                     {
+                        data: {
+                           itemId,
+                           status:
+                              'pending',
+                        },
+                     },
+                  );
+               }
                return {
                   item,
                   valuation,
                };
             },
          );
+
       try {
          await enqueueItemValuation({
             itemId,
@@ -264,6 +258,9 @@ export async function create(
             }, // user can hit Retry
          });
       }
+
+      await queueItemTaste(itemId);
+
       return res
          .status(StatusCodes.CREATED)
          .json({
@@ -324,6 +321,9 @@ export async function publish(
                select: { id: true },
                take: 1,
             },
+            _count: {
+               select: { wants: true },
+            },
          },
       },
    );
@@ -350,6 +350,18 @@ export async function publish(
          message:
             'Add at least one image first.',
       });
+   // Qloo publish gate (Phase 4b, Section 16.8). With the flag off,
+   // publishing works as before.
+   if (
+      isQlooEnabled() &&
+      item._count.wants === 0
+   )
+      return res.status(422).json({
+         success: false,
+         code: 'WANTS_REQUIRED',
+         message:
+            'Choose at least one category you would accept in exchange.',
+      });
 
    const updated = await db.item.update(
       {
@@ -362,6 +374,10 @@ export async function publish(
          },
       },
    );
+
+   await ensureItemTaste(id);
+   await queueMatchRefresh(id, 'publish');
+
    const warning =
       checkDeclaredValueOutlier(
          parsed.data
@@ -760,6 +776,8 @@ export async function mine(
       allowedStatuses.includes(status)
    )
       where.status = status;
+   // Copied before the cursor narrows it: total counts every match.
+   const countWhere = { ...where };
 
    if (cursor) {
       const c = decodeCursor(cursor);
@@ -796,8 +814,8 @@ export async function mine(
       ];
    }
 
-   const items = await db.item.findMany(
-      {
+   const [items, total] = await Promise.all([
+      db.item.findMany({
          where,
          include: {
             images: {
@@ -807,14 +825,25 @@ export async function mine(
                take: 1,
             },
             valuation: true,
+            wants: {
+               orderBy: { rank: 'asc' },
+               select: {
+                  categoryId: true,
+                  rank: true,
+                  category: {
+                     select: { name: true },
+                  },
+               },
+            },
          },
          orderBy: [
             { createdAt: 'desc' },
             { id: 'desc' },
          ],
          take: limit + 1,
-      },
-   );
+      }),
+      db.item.count({ where: countWhere }),
+   ]);
 
    const hasMore = items.length > limit;
    const page = items.slice(0, limit);
@@ -827,6 +856,15 @@ export async function mine(
            )
          : null;
 
+   // include=match_summary (Phase 4b, Section 16.8), flag on only.
+   const summaries =
+      isQlooEnabled() &&
+      String(req.query.include ?? '')
+         .split(',')
+         .includes('match_summary')
+         ? await getMatchSummaries(page, userId)
+         : null;
+
    const formatted = page.map(
       (item) => ({
          id: item.id,
@@ -835,11 +873,28 @@ export async function mine(
          status: item.status,
          is_service: item.isService,
          location: item.location,
+         item_wants: item.desiredTrade,
+         // Ranked wants (Phase 4b, Section 16.8)
+         wants: item.wants.map(
+            (w) => ({
+               category_id: w.categoryId,
+               name: w.category.name,
+               rank: w.rank,
+            }),
+         ),
          primary_image:
             item.images[0]?.url ?? null,
          valuation: formatValuation(
             item.valuation,
          ),
+         ...(summaries &&
+         item.status === 'available'
+            ? {
+                 match_summary:
+                    summaries.get(item.id) ??
+                    null,
+              }
+            : {}),
          created_at: item.createdAt,
       }),
    );
@@ -853,6 +908,7 @@ export async function mine(
          data: {
             items: formatted,
             next_cursor: nextCursor,
+            total,
          },
       });
 }
@@ -878,6 +934,20 @@ export async function show(
             valuation: true,
             user: true,
             category: true,
+            wants: {
+               orderBy: { rank: 'asc' },
+               select: {
+                  rank: true,
+                  category: {
+                     select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                        icon: true,
+                     },
+                  },
+               },
+            },
          },
       },
    );
@@ -890,6 +960,35 @@ export async function show(
             message: 'Item not found.',
          });
    }
+
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
+         });
+   }
+
+   // Ranked wants and match context (Phase 4b, Section 16.8), flag on only.
+   const qloo = isQlooEnabled();
+   const matchContext = qloo
+      ? await getMatchContext(
+           req.query.context_item_id as
+              | string
+              | undefined,
+           req.userId,
+           item,
+        )
+      : null;
 
    return res
       .status(StatusCodes.OK)
@@ -937,6 +1036,13 @@ export async function show(
                   item.user,
                   { extended: true },
                ),
+               ...(qloo
+                  ? {
+                       wants: item.wants,
+                       match_context:
+                          matchContext,
+                    }
+                  : {}),
                created_at:
                   item.createdAt,
             },
@@ -1022,6 +1128,12 @@ export async function update(
    const conditionChanged =
       rest.condition !== undefined &&
       rest.condition !== item.condition;
+   const titleChanged =
+      rest.title !== undefined &&
+      rest.title !== item.title;
+   const categoryChanged =
+      category_id !== undefined &&
+      category_id !== item.categoryId;
 
    const data: Record<string, unknown> =
       {};
@@ -1079,7 +1191,9 @@ export async function update(
 
    if (
       descriptionChanged ||
-      conditionChanged
+      conditionChanged ||
+      titleChanged ||
+      categoryChanged
    ) {
       const valuation =
          await db.itemValuation.upsert({
@@ -1102,6 +1216,16 @@ export async function update(
       await enqueueItemValuation({
          itemId: id,
          valuationId: valuation.id,
+      });
+   }
+
+   if (
+      titleChanged ||
+      descriptionChanged ||
+      categoryChanged
+   ) {
+      await requestItemTaste(id, {
+         reset: true,
       });
    }
 
@@ -1264,6 +1388,23 @@ export async function valuation(
          .json({
             success: false,
             message: 'Item not found.',
+         });
+   }
+
+   if (
+      item.userId !== req.userId &&
+      ['draft', 'inactive'].includes(
+         item.status,
+      )
+   ) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message:
+               ReasonPhrases.NOT_FOUND,
+            description:
+               'Item not found',
          });
    }
 

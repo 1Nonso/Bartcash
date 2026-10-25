@@ -23,23 +23,17 @@
 
 import api from "./api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  REFRESH_TOKEN_KEY,
+  USER_KEY,
+  setAccessToken,
+  clearSession,
+} from "./session";
 
-// ─── Storage Keys ─────────────────────────────────────────────────────────────
-const REFRESH_TOKEN_KEY = "bartcash_refresh_token";
-const USER_KEY = "bartcash_user";
-
-// ─── In-memory access token ───────────────────────────────────────────────────
-// Access token is kept in memory only — never persisted to AsyncStorage.
-// It is re-issued on app start via the refresh token.
-let _accessToken: string | null = null;
-
-export function getAccessToken(): string | null {
-  return _accessToken;
-}
-
-export function setAccessToken(token: string | null): void {
-  _accessToken = token;
-}
+// Token helpers live in session.ts and refreshTokens in api.ts (so the two
+// files don't import each other); re-exported so callers keep one import.
+export { getAccessToken, setAccessToken, clearSession } from "./session";
+export { refreshTokens } from "./api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -145,7 +139,7 @@ export async function login(
   const response = await api.post("/auth/login", payload);
 
   if (response.data?.data?.access_token) {
-    _accessToken = response.data.data.access_token;
+    setAccessToken(response.data.data.access_token);
     await AsyncStorage.setItem(
       REFRESH_TOKEN_KEY,
       response.data.data.refresh_token,
@@ -157,39 +151,6 @@ export async function login(
   }
 
   return response.data;
-}
-
-// ─── Refresh Token ────────────────────────────────────────────────────────────
-/**
- * POST /auth/refresh
- * Exchanges the stored refresh token for a new access + refresh token pair.
- * Called automatically by the API interceptor when a 401 is received.
- * Also called on app start to restore the session.
- */
-export async function refreshTokens(): Promise<boolean> {
-  try {
-    const storedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!storedRefreshToken) return false;
-
-    const response = await api.post("/auth/refresh", {
-      refresh_token: storedRefreshToken,
-    });
-
-    if (response.data?.data?.access_token) {
-      _accessToken = response.data.data.access_token;
-      await AsyncStorage.setItem(
-        REFRESH_TOKEN_KEY,
-        response.data.data.refresh_token,
-      );
-      return true;
-    }
-
-    return false;
-  } catch {
-    // Refresh token expired or revoked — session is dead
-    await clearSession();
-    return false;
-  }
 }
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
@@ -240,16 +201,6 @@ export async function resetPassword(
 }
 
 // ─── Session Helpers ──────────────────────────────────────────────────────────
-
-/**
- * Clears all local auth state.
- * Called on logout or when refresh token is expired/revoked.
- */
-export async function clearSession(): Promise<void> {
-  _accessToken = null;
-  await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
-  await AsyncStorage.removeItem(USER_KEY);
-}
 
 /**
  * Returns the stored user object from AsyncStorage.

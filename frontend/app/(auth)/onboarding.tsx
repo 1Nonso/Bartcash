@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,11 @@ import {
   Image,
   Platform,
 } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { StatusBar } from "expo-status-bar";
 import { router, useFocusEffect } from "expo-router";
 import { useAuthTheme } from "@/constants/useAuthTheme";
+import { markOnboardingSeen } from "@/config/onboarding";
 import { Spacing, Radius, Typography, Layout, FontSize } from "@/constants";
 
 const { width: SW, height: SH } = Dimensions.get("window");
@@ -50,25 +52,17 @@ function Slide({
   activeIndex: number;
   theme: ReturnType<typeof useAuthTheme>;
 }) {
-  const imageAnim = useRef(new Animated.Value(0)).current;
-  const textAnim = useRef(new Animated.Value(0)).current;
-  const imageTranslate = useRef(new Animated.Value(30)).current;
-  const textTranslate = useRef(new Animated.Value(24)).current;
+  const imageAnim = useAnimatedValue(0);
+  const textAnim = useAnimatedValue(0);
+  const imageTranslate = useAnimatedValue(30);
+  const textTranslate = useAnimatedValue(24);
 
   useFocusEffect(
     useCallback(() => {
       if (index === 0) triggerIn();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replay only when the screen regains focus; triggerIn is recreated each render
     }, []),
   );
-
-  const triggered = useRef(false);
-  if (index === activeIndex && !triggered.current) {
-    triggered.current = true;
-    triggerIn();
-  }
-  if (index !== activeIndex) {
-    triggered.current = false;
-  }
 
   function triggerIn() {
     imageAnim.setValue(0);
@@ -108,6 +102,13 @@ function Slide({
     ]).start();
   }
 
+  // Play the entrance each time this slide becomes the active one.
+  useEffect(() => {
+    if (index === activeIndex) triggerIn();
+    // triggerIn only touches this slide's animated values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, activeIndex]);
+
   return (
     <View style={styles.slide}>
       <Animated.View
@@ -144,8 +145,8 @@ function DotIndicator({
   active: boolean;
   theme: ReturnType<typeof useAuthTheme>;
 }) {
-  const widthAnim = useRef(new Animated.Value(active ? 20 : 8)).current;
-  const opacityAnim = useRef(new Animated.Value(active ? 1 : 0.3)).current;
+  const widthAnim = useAnimatedValue(active ? 20 : 8);
+  const opacityAnim = useAnimatedValue(active ? 1 : 0.3);
 
   Animated.parallel([
     Animated.spring(widthAnim, {
@@ -180,7 +181,7 @@ export default function OnboardingScreen() {
   const theme = useAuthTheme();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList<(typeof SLIDES)[0]> | null>(null);
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const buttonScale = useAnimatedValue(1);
 
   const goTo = (index: number) => {
     flatListRef.current?.scrollToIndex({ index, animated: true });
@@ -204,6 +205,7 @@ export default function OnboardingScreen() {
     if (activeIndex < SLIDES.length - 1) {
       goTo(activeIndex + 1);
     } else {
+      markOnboardingSeen();
       router.replace("/(auth)/sign-up");
     }
   };
@@ -213,6 +215,7 @@ export default function OnboardingScreen() {
   };
 
   const handleSkip = () => {
+    markOnboardingSeen();
     router.replace("/(auth)/sign-in");
   };
 

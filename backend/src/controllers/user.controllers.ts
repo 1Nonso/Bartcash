@@ -12,35 +12,59 @@ import {
    deleteFromR2,
 } from '../utils/storage.utils';
 import { pushTokenSchema } from '../validators/user.validators';
+import { randomBytes } from 'node:crypto';
+import { getTasteSummary } from '../services/taste.service';
+import { deleteTasteData } from '../services/tasteCleanup';
+import { qlooConfig } from '../config/qloo.config';
+
+class DeletionBlockedError extends Error {
+   constructor(
+      public tradeIds: string[],
+   ) {
+      super(
+         'Account has accepted or disputed trades.',
+      );
+   }
+}
 
 export async function getProfile(
    req: Request,
    res: Response,
 ) {
-   const user =
-      await db.user.findUnique({
-         where: { id: req.userId! },
-         select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            profilePhoto: true,
-            bio: true,
-            location: true,
-            averageRating: true,
-            totalTrades: true,
-            emailVerifiedAt: true,
-            createdAt: true,
-         },
-      });
+   const [user, taste] =
+      await Promise.all([
+         db.user.findUnique({
+            where: { id: req.userId! },
+            select: {
+               id: true,
+               firstName: true,
+               lastName: true,
+               email: true,
+               profilePhoto: true,
+               bio: true,
+               location: true,
+               averageRating: true,
+               totalTrades: true,
+               emailVerifiedAt: true,
+               createdAt: true,
+            },
+         }),
+         getTasteSummary(req.userId!),
+      ]);
 
    return res
       .status(StatusCodes.OK)
       .json({
          success: true,
          message: 'Profile retrieved.',
-         data: { user },
+         data: {
+            user: user
+               ? { ...user, taste }
+               : user,
+            features: {
+               qloo: qlooConfig.enabled,
+            },
+         },
       });
 }
 
@@ -48,10 +72,24 @@ export async function updateProfile(
    req: Request,
    res: Response,
 ) {
+   // Body is validated by updateProfileSchema (snake_case); map it to the
+   // Prisma fields explicitly, never pass req.body through.
+   const body = req.body as {
+      first_name?: string;
+      last_name?: string;
+      bio?: string | null;
+      location?: string | null;
+   };
+   const data = {
+      ...(body.first_name !== undefined ? { firstName: body.first_name.trim() } : {}),
+      ...(body.last_name !== undefined ? { lastName: body.last_name.trim() } : {}),
+      ...(body.bio !== undefined ? { bio: body.bio } : {}),
+      ...(body.location !== undefined ? { location: body.location } : {}),
+   };
    const updated = await db.user.update(
       {
          where: { id: req.userId! },
-         data: req.body,
+         data,
          select: {
             id: true,
             firstName: true,
@@ -131,22 +169,300 @@ export async function deleteAccount(
    res: Response,
 ) {
    const userId = req.userId!;
+   let avatarToRemove: string | null =
+      null;
 
-   await db.refreshToken.updateMany({
-      where: { userId, revoked: false },
-      data: {
-         revoked: true,
-         revokedAt: new Date(),
-      },
-   });
+   try {
+      await db.$transaction(
+         async (tx) => {
+            const now = new Date();
 
-   await db.user.delete({
-      where: { id: userId },
-   }); // hard delete — swap to soft delete if `deletedAt` exists on User
+            await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
 
-   // Deferred until Trades/Notifications are migrated:
-   // - cancel pending trade proposals where this user is the proposer
-   // - notify active trading partners that this user deleted their account
+            const user =
+               await tx.user.findUnique(
+                  {
+                     where: {
+                        id: userId,
+                     },
+                     select: {
+                        profilePhoto: true,
+                        deletedAt: true,
+                     },
+                  },
+               );
+            if (!user || user.deletedAt)
+               return;
+
+            const blocking =
+               await tx.trade.findMany({
+                  where: {
+                     status: {
+                        in: [
+                           'accepted',
+                           'disputed',
+                        ],
+                     },
+                     OR: [
+                        {
+                           proposerId:
+                              userId,
+                        },
+                        {
+                           receiverId:
+                              userId,
+                        },
+                     ],
+                  },
+                  select: { id: true },
+               });
+            if (blocking.length > 0) {
+               throw new DeletionBlockedError(
+                  blocking.map(
+                     (t) => t.id,
+                  ),
+               );
+            }
+
+            // 2. Cancel open trades, release items, notify the other party
+            const openTrades =
+               await tx.trade.findMany({
+                  where: {
+                     status: {
+                        in: [
+                           'negotiating',
+                        ],
+                     },
+                     OR: [
+                        {
+                           proposerId:
+                              userId,
+                        },
+                        {
+                           receiverId:
+                              userId,
+                        },
+                     ],
+                  },
+                  select: {
+                     id: true,
+                     proposerId: true,
+                     receiverId: true,
+                     tradeItems: {
+                        select: {
+                           itemId: true,
+                        },
+                     },
+                  },
+               });
+
+            if (openTrades.length > 0) {
+               const tradeIds =
+                  openTrades.map(
+                     (t) => t.id,
+                  );
+               const itemIds =
+                  openTrades.flatMap(
+                     (t) =>
+                        t.tradeItems.map(
+                           (ti) =>
+                              ti.itemId,
+                        ),
+                  );
+
+               await tx.trade.updateMany(
+                  {
+                     where: {
+                        id: {
+                           in: tradeIds,
+                        },
+                     },
+                     data: {
+                        status:
+                           'cancelled',
+                        cancelledAt:
+                           now,
+                        cancelledBy:
+                           userId,
+                        awaitingResponseFrom:
+                           null,
+                     },
+                  },
+               );
+
+               // Release items, unless they're still tied up in another live trade
+               await tx.item.updateMany(
+                  {
+                     where: {
+                        id: {
+                           in: itemIds,
+                        },
+                        status:
+                           'in_trade',
+                        tradeItems: {
+                           none: {
+                              trade: {
+                                 status:
+                                    {
+                                       in: [
+                                          'negotiating',
+                                          'accepted',
+                                          'disputed',
+                                       ],
+                                    },
+                              },
+                           },
+                        },
+                     },
+                     data: {
+                        status:
+                           'available',
+                     },
+                  },
+               );
+
+               await tx.notification.createMany(
+                  {
+                     data: openTrades.map(
+                        (t) => ({
+                           userId:
+                              t.proposerId ===
+                              userId
+                                 ? t.receiverId
+                                 : t.proposerId,
+                           type: 'trade_cancelled',
+                           title: 'Trade cancelled',
+                           body: 'The other user deleted their account, so this trade was cancelled.',
+                           referenceId:
+                              t.id,
+                           referenceType:
+                              'trade',
+                        }),
+                     ),
+                  },
+               );
+            }
+
+            // 3. Revoke all refresh tokens
+            await tx.refreshToken.updateMany(
+               {
+                  where: {
+                     userId,
+                     revoked: false,
+                  },
+                  data: {
+                     revoked: true,
+                     revokedAt: now,
+                  },
+               },
+            );
+
+            // 4. Soft-delete the user's items (keep 'traded' status for history)
+            await tx.item.updateMany({
+               where: {
+                  userId,
+                  deletedAt: null,
+                  status: {
+                     not: 'traded',
+                  },
+               },
+               data: {
+                  deletedAt: now,
+                  status: 'inactive',
+               },
+            });
+            await tx.item.updateMany({
+               where: {
+                  userId,
+                  deletedAt: null,
+               },
+               data: { deletedAt: now },
+            });
+
+            await deleteTasteData(
+               tx,
+               userId,
+            );
+
+            // 5. Soft delete + anonymise the user
+            avatarToRemove =
+               user.profilePhoto;
+            await tx.user.update({
+               where: { id: userId },
+               data: {
+                  deletedAt: now,
+                  isActive: false,
+                  email: `deleted+${userId}@invalid.local`,
+                  // password is NOT NULL: replace with an unusable value
+                  password:
+                     randomBytes(
+                        48,
+                     ).toString('hex'),
+                  firstName: 'Deleted',
+                  lastName: 'User',
+                  bio: null,
+                  location: null,
+                  profilePhoto: null,
+                  pushToken: null,
+               },
+            });
+         },
+         { timeout: 15_000 },
+      );
+   } catch (err) {
+      if (
+         err instanceof
+         DeletionBlockedError
+      ) {
+         return res
+            .status(
+               StatusCodes.CONFLICT,
+            )
+            .json({
+               success: false,
+               message:
+                  ReasonPhrases.CONFLICT,
+               description:
+                  'Complete or resolve your accepted and disputed trades before deleting your account.',
+               blockingTradeIds:
+                  err.tradeIds,
+            });
+      }
+      throw err;
+   }
+
+   if (avatarToRemove) {
+      try {
+         await deleteFromR2(
+            avatarToRemove,
+         );
+      } catch (e) {
+         console.error(
+            'R2 avatar cleanup failed',
+            {
+               userId,
+               avatar: avatarToRemove,
+               e,
+            },
+         );
+      }
+   }
+
+   // await db.refreshToken.updateMany({
+   //    where: { userId, revoked: false },
+   //    data: {
+   //       revoked: true,
+   //       revokedAt: new Date(),
+   //    },
+   // });
+   //
+   // await db.user.delete({
+   //    where: { id: userId },
+   // }); // hard delete — swap to soft delete if `deletedAt` exists on User
+   //
+   // // Deferred until Trades/Notifications are migrated:
+   // // - cancel pending trade proposals where this user is the proposer
+   // // - notify active trading partners that this user deleted their account
 
    return res
       .status(StatusCodes.OK)
@@ -179,14 +495,26 @@ export async function updatePushToken(
                   .fieldErrors,
          });
    }
-   await db.user.updateMany({
-      where: {
-         pushToken: token,
-         id: { not: req.userId },
-      },
-      data: { pushToken: null },
-   });
 
+   const { push_token } = parsed.data;
+
+   await db.$transaction([
+      db.user.updateMany({
+         where: {
+            pushToken: push_token,
+            id: {
+               not: req.userId as string,
+            },
+         },
+         data: { pushToken: null },
+      }),
+      db.user.update({
+         where: { id: req.userId! },
+         data: {
+            pushToken: push_token,
+         },
+      }),
+   ]);
    return res
       .status(StatusCodes.OK)
       .json({

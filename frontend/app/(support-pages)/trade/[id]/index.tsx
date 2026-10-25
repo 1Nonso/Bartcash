@@ -1,16 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Alert } from "@/config/alert";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/hooks/navigation";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,7 +19,6 @@ import {
   Colors,
   Layout,
   Radius,
-  Shadows,
   Spacing,
   Typography,
 } from "@/constants";
@@ -29,13 +28,13 @@ import {
   TradeItem,
   TradeOfferHistoryEntry,
   CurrentOffer,
-  acceptTrade,
   cancelTrade,
   completeTrade,
   declineTrade,
   getTradeById,
 } from "@/config/trades";
 import { getStoredUser } from "@/config/auth";
+import { conditionLabel, formatValuation } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,23 +77,6 @@ function statusConfig(status: string): {
   }
 }
 
-function conditionLabel(c: string): string {
-  const map: Record<string, string> = {
-    new: "Brand New",
-    good: "Good",
-    fair: "Fair",
-    poor: "Poor",
-  };
-  return map[c] ?? c;
-}
-
-function formatVal(item: TradeItem): string | null {
-  const v = item.valuation;
-  if (!v || v.status !== "completed" || !v.value_min || !v.value_max)
-    return null;
-  return `₦${Number(v.value_min).toLocaleString()} – ₦${Number(v.value_max).toLocaleString()}`;
-}
-
 // ─── Trade item card ──────────────────────────────────────────────────────────
 
 interface TradeItemCardProps {
@@ -104,8 +86,8 @@ interface TradeItemCardProps {
 
 function TradeItemCard({ item, label }: TradeItemCardProps) {
   const theme = useAuthTheme();
-  const valuation = formatVal(item);
-  const primaryImage = item.primary_image ?? item.images?.[0]?.url ?? null;
+  const valuation = formatValuation(item.valuation);
+  const primaryImage = item.primary_image;
 
   return (
     <View
@@ -142,15 +124,17 @@ function TradeItemCard({ item, label }: TradeItemCardProps) {
           >
             {item.title}
           </Text>
-          <Text style={[styles.tradeItemMeta, { color: theme.textMuted }]}>
-            {conditionLabel(item.condition)}
-          </Text>
+          {item.condition && (
+            <Text style={[styles.tradeItemMeta, { color: theme.textMuted }]}>
+              {conditionLabel(item.condition)}
+            </Text>
+          )}
           {valuation && (
             <View style={styles.valuationRow}>
               <Ionicons name="trending-up" size={11} color={Colors.ai} />
               <Text style={styles.valuationText}>{valuation}</Text>
               <Text style={[styles.aiLabel, { color: theme.textMuted }]}>
-                · AI Value
+                · Valuation
               </Text>
             </View>
           )}
@@ -175,7 +159,7 @@ function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
       {offer.trade_type === "cash" ? (
         <Text style={[styles.offerAmount, { color: theme.textPrimary }]}>
           {offer.cash_amount
-            ? `₦${Number(offer.cash_amount).toLocaleString()}`
+            ? `$${Number(offer.cash_amount).toLocaleString()}`
             : "—"}
         </Text>
       ) : (
@@ -201,7 +185,7 @@ function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
           </View>
           {offer.top_up_amount && Number(offer.top_up_amount) > 0 && (
             <Text style={[styles.offerTopUpText, { color: theme.textMuted }]}>
-              Plus a cash top-up of ₦
+              Plus a cash top-up of $
               {Number(offer.top_up_amount).toLocaleString()}
             </Text>
           )}
@@ -256,11 +240,11 @@ function OfferHistorySection({
               >
                 {entry.trade_type === "cash"
                   ? entry.cash_amount
-                    ? `₦${Number(entry.cash_amount).toLocaleString()}`
+                    ? `$${Number(entry.cash_amount).toLocaleString()}`
                     : "—"
                   : `${entry.offered_item_ids.length} item(s)${
                       entry.top_up_amount && Number(entry.top_up_amount) > 0
-                        ? ` + ₦${Number(entry.top_up_amount).toLocaleString()} top-up`
+                        ? ` + $${Number(entry.top_up_amount).toLocaleString()} top-up`
                         : ""
                     }`}
               </Text>
@@ -291,7 +275,7 @@ export default function TradeDetailScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const contentAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useAnimatedValue(0);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -321,9 +305,10 @@ export default function TradeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [contentAnim, id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state is set after the await
     loadTrade();
   }, [loadTrade]);
 
@@ -986,7 +971,7 @@ export default function TradeDetailScreen() {
               ]}
             >
               <Text style={[styles.waitingText, { color: Colors.warning }]}>
-                Awaiting {otherParty?.first_name}'s response.
+                Awaiting {otherParty?.first_name}&apos;s response.
               </Text>
             </View>
             {isProposer && (

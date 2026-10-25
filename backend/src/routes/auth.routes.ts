@@ -12,6 +12,7 @@ import {
    forgotPasswordSchema,
    resetPasswordSchema,
 } from '../validators/auth.validators';
+import { limiter } from '../libs/rateLimiter';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.post(
 );
 router.post(
    '/verify-otp',
+   limiter,
    validate(verifyOtpSchema),
    authController.verifyOtp,
 );

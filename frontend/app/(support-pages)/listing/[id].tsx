@@ -104,7 +104,9 @@ function confidenceFillPercent(level: ConfidenceLevel | null): number {
 }
 
 export function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
+  // A phone clock behind the server makes new items look like the future;
+  // treat that as "Today" (was "-1 days ago").
+  const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
   const days = Math.floor(diff / 86400000);
   if (days === 0) return "Today";
   if (days === 1) return "1 day ago";

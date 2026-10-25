@@ -13,9 +13,6 @@
       "developmentClient": false,
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://bartcash-api-3ie0.onrender.com/api/"
       }
     },
     "staging": {

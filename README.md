@@ -4,7 +4,11 @@
 
 I'm building Bartcash as a startup, starting in Nigeria, where a lot of value sits in things people own but no longer use, and cash is often the scarce part of a trade. I built the core marketplace in September 2026. When I heard about the Qloo hackathon I entered it to add taste intelligence to the matching, and to look for funding to take Bartcash further.
 
-> **Try it:** Android build: _link coming soon_ · Test login: _coming soon_
+> **Try it:** Android build: _link coming soon_ · Demo logins: on the Devpost page (testing instructions)
+>
+> Start with a demo account: it already has listings, matches, people with similar taste and an offer waiting. Then create your own account and list something to see Scout work from scratch. The verification code email may land in your **spam** folder.
+>
+> **About valuations:** the Automated Valuation runs on a free plan with a daily limit. If many listings are valued on the same day, a new listing's valuation may say it couldn't be completed; try again later (the owner can retry from the listing page). Matching and the rest of the app keep working; on such a day, what-to-ask-for suggestions show "Popular choices" instead of brand-based ones.
 
 ---
 

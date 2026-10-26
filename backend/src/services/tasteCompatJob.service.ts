@@ -4,6 +4,7 @@
 // every pair they are in up to date for the other side.
 
 import { db } from '../config/db.config';
+import { isDemoJudge, NOT_DEMO_JUDGE } from '../config/demo.config';
 import type { Prisma } from '../generated/prisma/client';
 import { MIN_ACTIVE_ENTITIES } from './tasteSummary';
 import { queueMatchRefresh } from './matchRefresh.service';
@@ -54,7 +55,7 @@ async function loadProfiles(userIds: string[]): Promise<Map<string, ProfileEntit
 }
 
 /** Live users (not deleted, active account) with an active taste profile. */
-async function activePeers(excludeId: string): Promise<string[]> {
+async function activePeers(excludeId: string, excludeJudges = false): Promise<string[]> {
    const counts = await db.userTasteEntity.groupBy({
       by: ['userId'],
       where: { userId: { not: excludeId } },
@@ -63,7 +64,13 @@ async function activePeers(excludeId: string): Promise<string[]> {
    });
    if (counts.length === 0) return [];
    const users = await db.user.findMany({
-      where: { id: { in: counts.map((c) => c.userId) }, deletedAt: null, isActive: true },
+      where: {
+         id: { in: counts.map((c) => c.userId) },
+         deletedAt: null,
+         isActive: true,
+         // Demo judges are never paired with each other (config/demo.config.ts).
+         ...(excludeJudges ? NOT_DEMO_JUDGE : {}),
+      },
       select: { id: true },
       orderBy: [{ tasteUpdatedAt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
       take: PEER_LIMIT,
@@ -110,7 +117,7 @@ export async function runTasteCompat(
    const started = Date.now();
    const user = await db.user.findUnique({
       where: { id: userId },
-      select: { deletedAt: true, isActive: true },
+      select: { deletedAt: true, isActive: true, email: true },
    });
    const mine = (await loadProfiles([userId])).get(userId) ?? [];
    const involving = { OR: [{ userAId: userId }, { userBId: userId }] };
@@ -121,7 +128,7 @@ export async function runTasteCompat(
       return { outcome: 'inactive', removed: count, matchRefreshes };
    }
 
-   const peers = await activePeers(userId);
+   const peers = await activePeers(userId, isDemoJudge(user.email));
    const profiles = await loadProfiles(peers);
    const computedAt = new Date();
    const rows: ReturnType<typeof rowData>[] = [];
@@ -169,6 +176,10 @@ export async function readPair(callerId: string, otherId: string): Promise<PairR
    const count = (id: string) => counts.find((c) => c.userId === id)?._count._all ?? 0;
    if (count(callerId) < MIN_ACTIVE_ENTITIES) return { ok: false, reason: 'profile_inactive_self' };
    if (count(otherId) < MIN_ACTIVE_ENTITIES) return { ok: false, reason: 'profile_inactive_other' };
+
+   // Two demo judges are never paired (config/demo.config.ts).
+   const emails = await db.user.findMany({ where: { id: { in: [callerId, otherId] } }, select: { email: true } });
+   if (emails.length === 2 && emails.every((u) => isDemoJudge(u.email))) return { ok: true, pair: null };
 
    if (stored && !stored.stale) {
       return {

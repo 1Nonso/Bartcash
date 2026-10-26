@@ -101,7 +101,8 @@ async function callGroq(
    if (response.status === 429) {
       const waitMs = await handle429(response, 'valuation');
       if (waitMs === null) {
-         throw new Error('Groq rate limit reached (long Retry-After).');
+         // Groq asks for a wait over 30 s only for its daily token limit (TPD).
+         throw new Error('Groq daily limit reached (long Retry-After).');
       }
       await groqLimiter.sleep(waitMs);
       response = await send();

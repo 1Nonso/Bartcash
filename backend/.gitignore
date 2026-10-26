@@ -5,3 +5,6 @@ node_modules/
 dist/
 *.log
 src/generated/
+
+# Demo seed photos (Unsplash, downloaded at seed time)
+src/scripts/demo-seed/images/

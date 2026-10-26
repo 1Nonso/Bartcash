@@ -3,6 +3,7 @@
 // Qloo client (component T); the request path ranks from the database only.
 
 import { db } from '../config/db.config';
+import { isDemoJudge, NOT_DEMO_JUDGE } from '../config/demo.config';
 import { matchConfig } from '../config/match.config';
 import { getShownSuggestionIds } from './wantSuggestions.service';
 import {
@@ -57,12 +58,12 @@ export function tasteOf(t: TasteRow): { entityId: string | null; entityName: str
 }
 
 /** Available, not deleted, someone else's, owner not deleted. */
-function eligibleWhere(ownerId: string) {
+function eligibleWhere(ownerId: string, excludeJudges: boolean) {
    return {
       status: 'available',
       deletedAt: null,
       userId: { not: ownerId },
-      user: { deletedAt: null },
+      user: { deletedAt: null, ...(excludeJudges ? NOT_DEMO_JUDGE : {}) },
    };
 }
 
@@ -71,11 +72,12 @@ async function loadTier(
    tier: PoolTier,
    categoryIds: string[] | null,
    excludeIds: string[],
+   excludeJudges = false,
 ): Promise<CandidateInput[]> {
    if (categoryIds && categoryIds.length === 0) return [];
    const items = await db.item.findMany({
       where: {
-         ...eligibleWhere(ownerId),
+         ...eligibleWhere(ownerId, excludeJudges),
          ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
          ...(excludeIds.length ? { id: { notIn: excludeIds } } : {}),
       },
@@ -103,9 +105,12 @@ async function loadCandidates(
    unpicked: string[],
 ): Promise<CandidateInput[]> {
    if (wantIds.length === 0) return [];
+   // Demo judges never match each other (config/demo.config.ts).
+   const owner = await db.user.findUnique({ where: { id: source.userId }, select: { email: true } });
+   const excludeJudges = isDemoJudge(owner?.email);
    const [tier1, tier2] = await Promise.all([
-      loadTier(source.userId, 1, wantIds, []),
-      loadTier(source.userId, 2, unpicked, []),
+      loadTier(source.userId, 1, wantIds, [], excludeJudges),
+      loadTier(source.userId, 2, unpicked, [], excludeJudges),
    ]);
    return [...tier1, ...tier2];
 }

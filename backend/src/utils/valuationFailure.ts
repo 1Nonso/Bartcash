@@ -5,6 +5,7 @@
 
 export type ValuationFailureCode =
    | 'rate_limited'
+   | 'daily_limit'
    | 'ai_unavailable'
    | 'image_unavailable'
    | 'no_image'
@@ -13,6 +14,7 @@ export type ValuationFailureCode =
 
 const MESSAGES: Record<ValuationFailureCode, string> = {
    rate_limited: 'The valuation service was busy. Try again in a minute.',
+   daily_limit: "The valuation service has reached today's limit. Try again later.",
    ai_unavailable: "The valuation service couldn't be reached. Try again later.",
    image_unavailable: "We couldn't read the listing photo. Try again, or change the main photo.",
    no_image: 'Add a photo to get a valuation.',
@@ -26,6 +28,7 @@ const CODES = new Set(Object.keys(MESSAGES));
 export function valuationFailureCode(raw: string | null | undefined): ValuationFailureCode {
    const s = (raw ?? '').trim();
    if (CODES.has(s)) return s as ValuationFailureCode;
+   if (/daily limit/i.test(s)) return 'daily_limit';
    if (/rate limit|\b429\b|paced out|too many requests/i.test(s)) return 'rate_limited';
    if (/no images/i.test(s)) return 'no_image';
    if (/fetch image/i.test(s)) return 'image_unavailable';

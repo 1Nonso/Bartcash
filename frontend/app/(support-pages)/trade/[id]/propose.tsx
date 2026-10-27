@@ -40,10 +40,16 @@ import { showToast } from "@/hooks/toast";
 import { formatValuation, conditionLabel } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+/** Cover photo: the full item has `images`; the caller's own listings come
+ *  from GET /items/mine, which sends `primary_image` (a URL, or { url }). */
 function getPrimaryImage(item: ItemDetail): string | null {
-  if (!item.images || item.images.length === 0) return null;
-  const primary = item.images.find((img) => img.is_primary);
-  return primary ? primary.url : item.images[0].url;
+  if (item.images && item.images.length > 0) {
+    const primary = item.images.find((img) => img.is_primary);
+    return primary ? primary.url : item.images[0].url;
+  }
+  const cover = (item as { primary_image?: string | { url?: string } | null }).primary_image;
+  if (!cover) return null;
+  return typeof cover === "string" ? cover : (cover.url ?? null);
 }
 
 // ─── Selectable item card ─────────────────────────────────────────────────────

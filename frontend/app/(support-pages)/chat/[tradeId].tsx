@@ -235,7 +235,12 @@ function MessageBubble({
           style={[
             styles.bubble,
             isOwn
-              ? [styles.bubbleOwn, { backgroundColor: Colors.primary }]
+              ? [
+                  styles.bubbleOwn,
+                  // Black on light; deep purple on dark (near-black matched
+                  // the dark background).
+                  { backgroundColor: theme.isDark ? theme.aiLight : Colors.primary },
+                ]
               : [
                   styles.bubbleOther,
                   {
@@ -250,7 +255,7 @@ function MessageBubble({
             style={[
               styles.bubbleText,
               {
-                color: isOwn ? Colors.white : theme.textPrimary,
+                color: isOwn && !theme.isDark ? Colors.white : theme.textPrimary,
                 opacity: isSending ? 0.6 : 1,
               },
             ]}
@@ -402,7 +407,7 @@ function TradeSummaryCard({
                     <View
                       style={[
                         styles.tradeSummaryThumbImg,
-                        { backgroundColor: Colors.gray[200] },
+                        { backgroundColor: theme.surfaceVariant },
                       ]}
                     />
                   )}
@@ -455,7 +460,7 @@ function TradeSummaryCard({
                     <View
                       style={[
                         styles.tradeSummaryThumbImg,
-                        { backgroundColor: Colors.gray[200] },
+                        { backgroundColor: theme.surfaceVariant },
                       ]}
                     />
                   )}

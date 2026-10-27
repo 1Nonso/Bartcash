@@ -15,6 +15,7 @@ import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTabBarSpace } from "@/hooks/useTabBarSpace";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFeatures } from "@/hooks/useFeatures";
 import { showToast } from "@/hooks/toast";
 import { resetGuides } from "@/components/guide/storage";
@@ -141,6 +142,7 @@ function StarRating({ score }: { score: number }) {
 export default function ProfileScreen() {
   const theme = useAuthTheme();
   const tabSpace = useTabBarSpace();
+  const insets = useSafeAreaInsets();
   const { qloo } = useFeatures();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -149,6 +151,8 @@ export default function ProfileScreen() {
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [totalRatings, setTotalRatings] = useState(0);
   const [loading, setLoading] = useState(true);
+  // First load failed (e.g. server waking up): show Try again, not a blank page.
+  const [loadError, setLoadError] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
@@ -176,30 +180,38 @@ export default function ProfileScreen() {
 
   // Reload on every focus: the tab stays mounted, so counts would go stale
   // after publishing or completing a trade.
+  const load = useCallback(async () => {
+    try {
+      const profileData = await fetchProfile();
+      setProfile(profileData);
+      setLoadError(false);
+
+      const [listingsData, ratingsData] = await Promise.all([
+        fetchMyListings(),
+        fetchMyRatings(profileData.id),
+      ]);
+      setListings(listingsData.items);
+      setListingsTotal(listingsData.total);
+      setRatings(ratingsData.ratings);
+      setTotalRatings(ratingsData.total_ratings);
+    } catch {
+      // Keep what was shown before; with nothing shown yet, offer Try again.
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      const load = async () => {
-        try {
-          const profileData = await fetchProfile();
-          setProfile(profileData);
-
-          const [listingsData, ratingsData] = await Promise.all([
-            fetchMyListings(),
-            fetchMyRatings(profileData.id),
-          ]);
-          setListings(listingsData.items);
-          setListingsTotal(listingsData.total);
-          setRatings(ratingsData.ratings);
-          setTotalRatings(ratingsData.total_ratings);
-        } catch {
-          // Non-blocking — profile loaded, sections may be empty
-        } finally {
-          setLoading(false);
-        }
-      };
       load();
-    }, []),
+    }, [load]),
   );
+
+  const retry = () => {
+    setLoading(true);
+    load();
+  };
 
   // ── Logout ───────────────────────────────────────────────────────────────────
 
@@ -265,12 +277,29 @@ export default function ProfileScreen() {
           { backgroundColor: theme.bg },
         ]}
       >
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={theme.textPrimary} />
       </View>
     );
   }
 
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.bg, gap: Spacing[3], paddingHorizontal: Spacing[6] }]}>
+        <Ionicons name="cloud-offline-outline" size={40} color={theme.textMuted} />
+        <Text style={{ ...Typography.body, color: theme.textPrimary, textAlign: "center" }}>
+          {loadError ? "Couldn't load your profile. Check your connection and try again." : "Loading your profile…"}
+        </Text>
+        <TouchableOpacity
+          onPress={retry}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          style={{ backgroundColor: theme.btnPrimary, borderRadius: 999, paddingHorizontal: Spacing[6], paddingVertical: Spacing[3] }}
+        >
+          <Text style={{ ...Typography.buttonSm, color: theme.btnPrimaryText }}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const fullName = `${profile.firstName} ${profile.lastName}`;
   const rating = parseFloat(profile.averageRating ?? "0").toFixed(1);
@@ -289,7 +318,7 @@ export default function ProfileScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: tabSpace + Spacing[2] },
-          { paddingTop: 60 },
+          { paddingTop: insets.top + Spacing[4] },
         ]}
       >
         {/* ── Profile header ── */}

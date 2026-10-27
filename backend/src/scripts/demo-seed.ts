@@ -537,7 +537,9 @@ async function refreshMatches(db: Db) {
    await boss.stop({ graceful: true }).catch(() => {});
 }
 
-/** Re-queue valuations that failed, or have been pending over 10 min. */
+/** Re-queue valuations that failed, or have been pending over 10 min.
+ *  Judges' items first, 25 s apart (Groq free tier: ~7,000 input tokens a
+ *  minute, ~2,200 per photo valuation). */
 async function retryValuations(db: Db) {
    const { enqueueItemValuation } = await import('../queue/itemValuation.queue');
    const { boss } = await import('../config/queue.config');
@@ -546,12 +548,14 @@ async function retryValuations(db: Db) {
          OR: [{ status: 'failed' }, { status: 'pending', updatedAt: { lt: new Date(Date.now() - 600_000) } }],
          item: { deletedAt: null },
       },
-      select: { id: true, itemId: true },
+      select: { id: true, itemId: true, item: { select: { user: { select: { email: true } } } } },
    });
+   const { isDemoJudge } = await import('../config/demo.config');
+   rows.sort((a, b) => Number(isDemoJudge(b.item.user.email)) - Number(isDemoJudge(a.item.user.email)));
    for (const r of rows) {
       await db.itemValuation.update({ where: { id: r.id }, data: { status: 'pending', failedReason: null } });
       await enqueueItemValuation({ itemId: r.itemId, valuationId: r.id });
-      await sleep(2000); // gentle on Groq's per-minute limits
+      await sleep(25_000);
    }
    console.log(`re-queued ${rows.length} valuations`);
    await boss.stop({ graceful: true }).catch(() => {});

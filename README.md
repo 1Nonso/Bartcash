@@ -4,7 +4,7 @@
 
 I'm building Bartcash as a startup, starting in Nigeria, where a lot of value sits in things people own but no longer use, and cash is often the scarce part of a trade. I built the core marketplace in September 2026. When I heard about the Qloo hackathon I entered it to add taste intelligence to the matching, and to look for funding to take Bartcash further.
 
-> **Try it:** Android build: _link coming soon_ · Demo logins: on the Devpost page (testing instructions)
+> **Try it:** [Download the Android app (APK)](https://github.com/1Nonso/Bartcash/releases/download/v1.0.1-hackathon/bartcash-1.0.1.apk) ([release notes](https://github.com/1Nonso/Bartcash/releases/tag/v1.0.1-hackathon)) · Demo logins: on the Devpost page (testing instructions)
 >
 > Start with a demo account: it already has listings, matches, people with similar taste and an offer waiting. Then create your own account and list something to see Scout work from scratch. The verification code email may land in your **spam** folder.
 >

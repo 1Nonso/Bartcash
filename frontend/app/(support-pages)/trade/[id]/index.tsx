@@ -38,7 +38,10 @@ import { conditionLabel, formatValuation } from "@/constants/listing";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function statusConfig(status: string): {
+function statusConfig(
+  status: string,
+  theme: ReturnType<typeof useAuthTheme>,
+): {
   label: string;
   color: string;
   bg: string;
@@ -63,8 +66,8 @@ function statusConfig(status: string): {
     case "cancelled":
       return {
         label: "Cancelled",
-        color: Colors.gray[500],
-        bg: Colors.gray[100],
+        color: theme.textSecondary,
+        bg: theme.surfaceVariant,
       };
     case "disputed":
       return {
@@ -73,7 +76,7 @@ function statusConfig(status: string): {
         bg: Colors.danger + "15",
       };
     default:
-      return { label: status, color: Colors.gray[500], bg: Colors.gray[100] };
+      return { label: status, color: theme.textSecondary, bg: theme.surfaceVariant };
   }
 }
 
@@ -111,10 +114,10 @@ function TradeItemCard({ item, label }: TradeItemCardProps) {
             style={[
               styles.tradeItemImage,
               styles.tradeItemImagePlaceholder,
-              { backgroundColor: Colors.gray[100] },
+              { backgroundColor: theme.surfaceVariant },
             ]}
           >
-            <Ionicons name="image-outline" size={20} color={Colors.gray[400]} />
+            <Ionicons name="image-outline" size={20} color={theme.textMuted} />
           </View>
         )}
         <View style={styles.tradeItemInfo}>
@@ -176,7 +179,7 @@ function CurrentOfferCard({ offer }: { offer: CurrentOffer }) {
                   <View
                     style={[
                       styles.offerItemThumbImg,
-                      { backgroundColor: Colors.gray[100] },
+                      { backgroundColor: theme.surfaceVariant },
                     ]}
                   />
                 )}
@@ -472,7 +475,7 @@ export default function TradeDetailScreen() {
 
   if (!trade) return null;
 
-  const { label, color, bg } = statusConfig(trade.status);
+  const { label, color, bg } = statusConfig(trade.status, theme);
 
   const myConfirmed = isProposer
     ? trade.proposer_confirmed
@@ -630,7 +633,7 @@ export default function TradeDetailScreen() {
                       style={[
                         styles.partyAvatar,
                         styles.partyAvatarFallback,
-                        { backgroundColor: Colors.gray[200] },
+                        { backgroundColor: theme.surfaceVariant },
                       ]}
                     >
                       <Ionicons
@@ -844,9 +847,14 @@ export default function TradeDetailScreen() {
                     style={[
                       styles.messageBubble,
                       {
+                        // Own: black (light) / deep purple (dark); theirs:
+                        // the theme surface (a fixed light grey was a
+                        // whitish box with unreadable text in dark mode).
                         backgroundColor: isMe
-                          ? Colors.primary
-                          : Colors.gray[100],
+                          ? theme.isDark
+                            ? theme.aiLight
+                            : Colors.primary
+                          : theme.surfaceVariant,
                         alignSelf: isMe ? "flex-end" : "flex-start",
                       },
                     ]}
@@ -854,7 +862,7 @@ export default function TradeDetailScreen() {
                     <Text
                       style={[
                         styles.messageBubbleText,
-                        { color: isMe ? Colors.white : theme.textPrimary },
+                        { color: isMe && !theme.isDark ? Colors.white : theme.textPrimary },
                       ]}
                     >
                       {msg.body}

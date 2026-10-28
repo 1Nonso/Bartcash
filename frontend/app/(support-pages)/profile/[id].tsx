@@ -6,8 +6,8 @@
  * If [id] matches the authenticated user, redirects to My Profile tab.
  *
  * API:
+ *   GET /users/{id}                            (public profile + available listings)
  *   GET /users/{id}/ratings
- *   GET /items?user_id={id}&status=available  (marketplace filter)
  *   GET /user/profile                          (to get own ID for redirect check)
  *   GET /users/{id}/taste-compatibility        (flag on; components/CommonTaste)
  */
@@ -187,6 +187,7 @@ export default function ViewUserProfileScreen() {
 
   const [user, setUser] = useState<PublicUser | null>(null);
   const [listings, setListings] = useState<MarketplaceItem[]>([]);
+  const [listingsTotal, setListingsTotal] = useState(0);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [averageRating, setAverageRating] = useState<string>("0.00");
   const [loading, setLoading] = useState(true);
@@ -227,43 +228,18 @@ export default function ViewUserProfileScreen() {
         return;
       }
 
-      // Fetch ratings (which also gives us the user's public info via average_rating)
-      // Fetch listings from marketplace filtered by owner
-      const [ratingsData, listingsData] = await Promise.allSettled([
-        getUserRatings(id, { limit: 5 }),
-        api.get("/items", { params: { limit: 6 } }),
+      const [profileRes, ratingsData] = await Promise.all([
+        api.get(`/users/${id}`),
+        getUserRatings(id, { limit: 5 }).catch(() => null),
       ]);
+      const profile = profileRes.data.data;
+      setUser(profile.user);
+      setListings(profile.listings);
+      setListingsTotal(profile.listings_total);
 
-      // We need to build user info — fetch from ratings rater data or
-      // from trade context. Backend doesn't have a standalone GET /users/{id}
-      // so we use the ratings response + items owner field.
-      if (listingsData.status === "fulfilled") {
-        const items: MarketplaceItem[] = listingsData.value.data.data.items;
-        // Filter to this user's items
-        const userItems = items.filter((item) => item.owner?.id === id);
-        setListings(userItems);
-
-        // Build public user from first listing's owner (only if not set yet;
-        // the functional update keeps fetchData independent of `user`)
-        if (userItems.length > 0) {
-          const owner = userItems[0].owner;
-          setUser((prev) => prev ?? {
-            id: owner.id,
-            first_name: owner.first_name,
-            last_name: owner.last_name,
-            profile_photo: owner.profile_photo,
-            bio: null,
-            location: null,
-            average_rating: owner.average_rating,
-            total_trades: 0,
-            created_at: new Date().toISOString(),
-          });
-        }
-      }
-
-      if (ratingsData.status === "fulfilled") {
-        setRatings(ratingsData.value.ratings);
-        setAverageRating(ratingsData.value.average_rating);
+      if (ratingsData) {
+        setRatings(ratingsData.ratings);
+        setAverageRating(ratingsData.average_rating);
       }
 
       setError(null);
@@ -572,7 +548,7 @@ export default function ViewUserProfileScreen() {
               />
               <View style={styles.statItem}>
                 <Text style={[styles.statNumber, { color: theme.textPrimary }]}>
-                  {listings.length}
+                  {listingsTotal}
                 </Text>
                 <Text style={[styles.statLabel, { color: theme.textMuted }]}>
                   Listings

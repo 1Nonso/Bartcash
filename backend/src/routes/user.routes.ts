@@ -12,8 +12,9 @@ import {
    updateAvatar,
    deleteAccount,
    updatePushToken,
+   showPublic,
 } from '../controllers/user.controllers';
-import { limiter } from '../libs/rateLimiter';
+import { limiter, userLimiter } from '../libs/rateLimiter';
 
 const router = Router();
 
@@ -70,6 +71,15 @@ router.patch(
    '/push-token',
    requireAuth,
    updatePushToken,
+);
+
+/** Mounted at /api: GET /users/:id (another user's public profile). */
+export const publicUserRouter = Router();
+publicUserRouter.get(
+   '/users/:id',
+   requireAuth,
+   userLimiter(60),
+   showPublic,
 );
 
 export default router;

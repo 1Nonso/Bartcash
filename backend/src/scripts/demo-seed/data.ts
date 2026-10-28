@@ -295,7 +295,7 @@ export const HISTORY: HistoryTrade[] = [
 /** The offer waiting for each judge (Inbox → Offers, "Your turn"). */
 export const JUDGE_OFFER = {
    from: 'ada',
-   item: { owner: 'ada', title: 'Samsung Galaxy Buds2', category: E as Slug, value: 85, photo: 'ada-samsung-s21.jpg' },
+   item: { owner: 'ada', title: 'Samsung Galaxy Buds2', category: E as Slug, value: 85, photo: 'ada-galaxy-buds.jpg' },
    topUp: 20,
    message: 'Hi! Would you swap your JBL Pulse 4 for my Galaxy Buds2? I can add $20 to balance it.',
 };

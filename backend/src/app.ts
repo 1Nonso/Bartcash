@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import { maskIds } from './utils/logSafe';
 import { rateLimit } from 'express-rate-limit';
 import authRoutes from '../src/routes/auth.routes';
-import userRoutes from '../src/routes/user.routes';
+import userRoutes, { publicUserRouter } from '../src/routes/user.routes';
 import categoryRoutes from '../src/routes/categories.routes';
 import itemRoutes from '../src/routes/item.routes';
 import tradeRoutes from '../src/routes/trade.routes';
@@ -70,6 +70,7 @@ app.use('/api', ratingRoutes); // /ratings, /users/:id/ratings
 app.use('/api/items', itemRoutes);
 app.use('/api/taste', tasteRoutes);
 app.use('/api', userTasteRouter); // /users/:id/taste-compatibility
+app.use('/api', publicUserRouter); // /users/:id
 app.use('/api/scout', scoutRoutes);
 app.use(
    '/api/categories',

@@ -314,12 +314,14 @@ export default function ProposeTradeScreen() {
       );
     }, 0);
 
-    if (theirAvg === 0) return null;
-    const ratio = myTotal / theirAvg;
-    // Score: 100% = perfect match, scales down as ratio diverges from 1
-    const score = Math.max(0, Math.min(100, 100 - Math.abs(1 - ratio) * 100));
+    // The cash top-up counts towards what you offer
+    const offered = myTotal + (Number(topUpAmount) || 0);
+    if (theirAvg === 0 || offered === 0) return null;
+    // Score: 100% when both sides are worth the same; the smaller side as a
+    // share of the larger one, so offering more and offering less score alike
+    const score = (100 * Math.min(offered, theirAvg)) / Math.max(offered, theirAvg);
     return Math.round(score);
-  }, [receiverItem, myItems, selectedItemIds]);
+  }, [receiverItem, myItems, selectedItemIds, topUpAmount]);
 
   const score = matchScore();
   const isFairTrade = score !== null && score >= 70;

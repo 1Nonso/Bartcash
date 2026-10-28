@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { getTasteSummary } from '../services/taste.service';
 import { deleteTasteData } from '../services/tasteCleanup';
 import { qlooConfig } from '../config/qloo.config';
+import { formatItemCard } from '../utils/itemFormat';
 
 class DeletionBlockedError extends Error {
    constructor(
@@ -521,4 +522,73 @@ export async function updatePushToken(
          success: true,
          message: 'Push token saved.',
       });
+}
+
+// -------------------------------------------------------------------------
+// GET /users/:id — another user's public profile and available listings
+// -------------------------------------------------------------------------
+const PUBLIC_LISTINGS_TAKE = 20;
+
+export async function showPublic(
+   req: Request,
+   res: Response,
+) {
+   const id = req.params.id as string;
+   const user = await db.user.findFirst({
+      where: { id, deletedAt: null },
+   });
+   if (!user) {
+      return res
+         .status(StatusCodes.NOT_FOUND)
+         .json({
+            success: false,
+            message: 'User not found.',
+         });
+   }
+
+   const where = {
+      userId: id,
+      status: 'available' as const,
+      deletedAt: null,
+      images: { some: {} },
+   };
+   const [listingsTotal, items] =
+      await Promise.all([
+         db.item.count({ where }),
+         db.item.findMany({
+            where,
+            include: {
+               images: {
+                  where: { isPrimary: true },
+                  take: 1,
+               },
+               valuation: true,
+               user: true,
+            },
+            orderBy: [
+               { createdAt: 'desc' },
+               { id: 'desc' },
+            ],
+            take: PUBLIC_LISTINGS_TAKE,
+         }),
+      ]);
+
+   return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+         user: {
+            id: user.id,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            profile_photo: user.profilePhoto,
+            bio: user.bio,
+            location: user.location,
+            average_rating: user.averageRating,
+            total_trades: user.totalTrades,
+            created_at: user.createdAt,
+         },
+         listings: items.map(formatItemCard),
+         listings_total: listingsTotal,
+      },
+   });
 }
